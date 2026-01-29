@@ -1,0 +1,6023 @@
+<template>
+  <v-app>
+    <!-- Mobile Header Bar -->
+    <div v-if="mobile && !focusMode" class="mobile-header-bar">
+      <!-- Back to Dashboard Button -->
+      <v-btn
+        class="back-btn-mobile"
+        icon
+        size="small"
+        variant="text"
+        @click="goToDashboard"
+      >
+        <v-icon>mdi-arrow-left</v-icon>
+      </v-btn>
+
+      <!-- Case Menu (with status and location) -->
+      <v-menu :close-on-content-click="false" location="bottom" offset="4">
+        <template #activator="{ props }">
+          <div v-bind="props" class="mobile-case-selector">
+            <v-icon class="mr-2" size="20">mdi-folder-open</v-icon>
+            <div class="mobile-case-info">
+              <span class="mobile-case-name">{{ viewerControls.state.value.caseName || 'Nenhum caso' }}</span>
+              <span class="mobile-slide-name">{{ currentSlideName }}</span>
+            </div>
+            <v-icon size="18">mdi-chevron-down</v-icon>
+          </div>
+        </template>
+
+        <div class="mobile-case-dropdown">
+          <!-- Slides Section -->
+          <div class="dropdown-header">
+            <span class="dropdown-title">Lâminas</span>
+            <v-chip color="secondary" size="x-small" variant="tonal">{{ caseSlides.length }}</v-chip>
+          </div>
+          <div class="mobile-slides-scroll">
+            <div
+              v-for="(slide, index) in caseSlides"
+              :key="slide.id"
+              class="slide-item"
+              :class="{ 'slide-item--active': slide.id === activeSlideId }"
+              @click="selectSlide(slide)"
+            >
+              <v-icon
+                class="slide-icon"
+                :color="slide.id === activeSlideId ? 'primary' : undefined"
+                size="18"
+              >
+                {{ slide.id === activeSlideId ? 'mdi-checkbox-marked-circle' : 'mdi-image-outline' }}
+              </v-icon>
+              <div class="slide-info">
+                <div class="slide-label-row">
+                  <span class="slide-item-name">Lâmina {{ index + 1 }}</span>
+                  <v-chip class="slide-stain-chip" size="x-small" variant="text">{{ slide.stain }}</v-chip>
+                </div>
+                <span class="slide-id-text">{{ slide.name }}</span>
+              </div>
+              <v-icon v-if="slide.id === activeSlideId" class="check-icon" color="primary" size="16">mdi-check</v-icon>
+            </div>
+          </div>
+
+          <v-divider class="my-1" />
+
+          <!-- Status Section -->
+          <div class="dropdown-header">
+            <span class="dropdown-title">Status do Caso</span>
+            <v-chip :color="reportStatusColor" size="x-small" variant="tonal">{{ reportStatusLabel }}</v-chip>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'novo' }"
+            @click="setReportStatus('novo')"
+          >
+            <v-icon :color="reportStatus === 'novo' ? 'warning' : undefined" size="18">mdi-new-box</v-icon>
+            <span>Novo</span>
+            <v-icon v-if="reportStatus === 'novo'" class="ml-auto" color="warning" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'em_analise' }"
+            @click="setReportStatus('em_analise')"
+          >
+            <v-icon :color="reportStatus === 'em_analise' ? 'info' : undefined" size="18">mdi-progress-clock</v-icon>
+            <span>Em Análise</span>
+            <v-icon v-if="reportStatus === 'em_analise'" class="ml-auto" color="info" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'concluido' }"
+            @click="setReportStatus('concluido')"
+          >
+            <v-icon :color="reportStatus === 'concluido' ? 'success' : undefined" size="18">mdi-check-circle</v-icon>
+            <span>Concluído</span>
+            <v-icon v-if="reportStatus === 'concluido'" class="ml-auto" color="success" size="14">mdi-check</v-icon>
+          </div>
+
+          <v-divider class="my-1" />
+
+          <!-- Location Section -->
+          <div class="dropdown-header">
+            <span class="dropdown-title">Localização</span>
+            <v-chip :color="caseLocationColor" size="x-small" variant="tonal">{{ caseLocationLabel }}</v-chip>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': caseLocation === 'inbox' }"
+            @click="caseLocation !== 'inbox' && moveCaseTo('inbox')"
+          >
+            <v-icon :color="caseLocation === 'inbox' ? 'primary' : undefined" size="18">mdi-inbox</v-icon>
+            <span>Caixa de Entrada</span>
+            <v-icon v-if="caseLocation === 'inbox'" class="ml-auto" color="primary" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': caseLocation === 'archived' }"
+            @click="caseLocation !== 'archived' && moveCaseTo('archived')"
+          >
+            <v-icon :color="caseLocation === 'archived' ? 'secondary' : undefined" size="18">mdi-archive</v-icon>
+            <span>Arquivados</span>
+            <v-icon v-if="caseLocation === 'archived'" class="ml-auto" color="secondary" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{
+              'case-action-item--active': caseLocation === 'trash',
+              'case-action-item--danger': caseLocation !== 'trash'
+            }"
+            @click="caseLocation !== 'trash' ? showTrashConfirm = true : null"
+          >
+            <v-icon :color="caseLocation === 'trash' ? 'error' : undefined" size="18">mdi-trash-can</v-icon>
+            <span>Lixeira</span>
+            <v-icon v-if="caseLocation === 'trash'" class="ml-auto" color="error" size="14">mdi-check</v-icon>
+          </div>
+        </div>
+      </v-menu>
+
+    </div>
+
+    <!-- Desktop Floating Case Name (Centered) with Case Menu and Slides Dropdown -->
+    <div v-if="!mobile && !focusMode" class="floating-case-container">
+      <!-- Case Menu -->
+      <v-menu :close-on-content-click="true" location="bottom start" offset="4">
+        <template #activator="{ props }">
+          <div v-bind="props" class="case-selector">
+            <v-icon class="case-icon" size="16">mdi-folder-open</v-icon>
+            <span class="case-name">{{ viewerControls.state.value.caseName || 'Nenhum caso' }}</span>
+            <v-icon class="chevron-icon" size="12">mdi-chevron-down</v-icon>
+          </div>
+        </template>
+
+        <div class="case-actions-dropdown">
+          <div class="dropdown-header">
+            <span class="dropdown-title">Status do Caso</span>
+            <v-chip :color="reportStatusColor" size="x-small" variant="tonal">
+              {{ reportStatusLabel }}
+            </v-chip>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'novo' }"
+            @click="setReportStatus('novo')"
+          >
+            <v-icon :color="reportStatus === 'novo' ? 'warning' : undefined" size="18">mdi-new-box</v-icon>
+            <span>Novo</span>
+            <v-icon v-if="reportStatus === 'novo'" class="ml-auto" color="warning" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'em_analise' }"
+            @click="setReportStatus('em_analise')"
+          >
+            <v-icon :color="reportStatus === 'em_analise' ? 'info' : undefined" size="18">mdi-progress-clock</v-icon>
+            <span>Em Análise</span>
+            <v-icon v-if="reportStatus === 'em_analise'" class="ml-auto" color="info" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': reportStatus === 'concluido' }"
+            @click="setReportStatus('concluido')"
+          >
+            <v-icon :color="reportStatus === 'concluido' ? 'success' : undefined" size="18">mdi-check-circle</v-icon>
+            <span>Concluído</span>
+            <v-icon v-if="reportStatus === 'concluido'" class="ml-auto" color="success" size="14">mdi-check</v-icon>
+          </div>
+
+          <v-divider class="my-1" />
+
+          <div class="dropdown-header">
+            <span class="dropdown-title">Localização</span>
+            <v-chip :color="caseLocationColor" size="x-small" variant="tonal">
+              {{ caseLocationLabel }}
+            </v-chip>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': caseLocation === 'inbox' }"
+            @click="caseLocation !== 'inbox' && moveCaseTo('inbox')"
+          >
+            <v-icon :color="caseLocation === 'inbox' ? 'primary' : undefined" size="18">mdi-inbox</v-icon>
+            <span>Caixa de Entrada</span>
+            <v-icon v-if="caseLocation === 'inbox'" class="ml-auto" color="primary" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{ 'case-action-item--active': caseLocation === 'archived' }"
+            @click="caseLocation !== 'archived' && moveCaseTo('archived')"
+          >
+            <v-icon :color="caseLocation === 'archived' ? 'secondary' : undefined" size="18">mdi-archive</v-icon>
+            <span>Arquivados</span>
+            <v-icon v-if="caseLocation === 'archived'" class="ml-auto" color="secondary" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            class="case-action-item"
+            :class="{
+              'case-action-item--active': caseLocation === 'trash',
+              'case-action-item--danger': caseLocation !== 'trash'
+            }"
+            @click="caseLocation !== 'trash' ? showTrashConfirm = true : null"
+          >
+            <v-icon :color="caseLocation === 'trash' ? 'error' : undefined" size="18">mdi-trash-can</v-icon>
+            <span>Lixeira</span>
+            <v-icon v-if="caseLocation === 'trash'" class="ml-auto" color="error" size="14">mdi-check</v-icon>
+          </div>
+          <div
+            v-if="caseLocation === 'trash'"
+            class="case-action-item case-action-item--danger"
+            @click="showDeleteConfirm = true"
+          >
+            <v-icon color="error" size="18">mdi-delete-forever</v-icon>
+            <span>Excluir Permanentemente</span>
+          </div>
+        </div>
+      </v-menu>
+
+      <v-divider class="mx-2 selector-divider" vertical />
+
+      <!-- Slides Menu -->
+      <v-menu :close-on-content-click="true" location="bottom end" offset="4">
+        <template #activator="{ props }">
+          <div v-bind="props" class="slide-selector">
+            <v-icon class="slide-icon" size="16">mdi-image-multiple</v-icon>
+            <span class="slide-name">{{ currentSlideName }}</span>
+            <v-icon class="chevron-icon" size="12">mdi-chevron-down</v-icon>
+          </div>
+        </template>
+
+        <div class="slides-dropdown">
+          <div class="dropdown-header">
+            <span class="dropdown-title">Lâminas do Caso</span>
+            <v-chip color="secondary" size="x-small" variant="tonal">
+              {{ caseSlides.length }}
+            </v-chip>
+          </div>
+          <v-divider />
+          <div
+            v-for="(slide, index) in caseSlides"
+            :key="slide.id"
+            class="slide-item"
+            :class="{ 'slide-item--active': slide.id === activeSlideId }"
+            @click="selectSlide(slide)"
+          >
+            <v-icon
+              class="slide-icon"
+              :color="slide.id === activeSlideId ? 'primary' : undefined"
+              size="18"
+            >
+              {{ slide.id === activeSlideId ? 'mdi-checkbox-marked-circle' : 'mdi-image-outline' }}
+            </v-icon>
+            <div class="slide-info">
+              <div class="slide-label-row">
+                <span class="slide-item-name">Lâmina {{ index + 1 }}</span>
+                <v-chip class="slide-stain-chip" size="x-small" variant="text">{{ slide.stain }}</v-chip>
+              </div>
+              <span class="slide-id-text">{{ slide.name }}</span>
+            </div>
+            <v-icon
+              v-if="slide.id === activeSlideId"
+              class="check-icon"
+              color="primary"
+              size="16"
+            >
+              mdi-check
+            </v-icon>
+          </div>
+        </div>
+      </v-menu>
+    </div>
+
+    <!-- Right Panel (Desktop) -->
+    <v-navigation-drawer
+      v-if="!mobile"
+      v-model="rightPanel"
+      class="right-panel"
+      :class="{ 'is-resizing': isResizingPanel }"
+      location="right"
+      permanent
+      :width="rightPanelWidth"
+    >
+      <!-- Resize Handle -->
+      <div class="panel-resize-handle" @mousedown="startPanelResize">
+        <div class="resize-handle-indicator" />
+      </div>
+
+      <v-tabs v-model="activeTab" color="primary" height="56" show-arrows>
+        <v-tab prepend-icon="mdi-map-marker" value="annotations">
+          <span class="tab-label">Notas</span>
+        </v-tab>
+        <v-tab prepend-icon="mdi-robot" value="ai">
+          <span class="tab-label">IA</span>
+        </v-tab>
+        <v-tab prepend-icon="mdi-file-document-edit" value="report">
+          <span class="tab-label">Laudo</span>
+        </v-tab>
+        <v-tab prepend-icon="mdi-information" value="details">
+          <span class="tab-label">Detalhes</span>
+        </v-tab>
+      </v-tabs>
+      <v-tabs-window v-model="activeTab">
+        <!-- Annotations Section -->
+        <v-tabs-window-item value="annotations">
+          <!-- Lista de Notas (quando nenhuma selecionada) -->
+          <div v-if="!selectedAnnotation" class="annotations-panel">
+            <!-- Header -->
+            <div class="panel-section-header">
+              <div class="d-flex align-center justify-space-between px-4 py-3">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="primary" size="20">mdi-map-marker-multiple</v-icon>
+                  <span class="text-subtitle-2 font-weight-medium">Regiões de Interesse</span>
+                </div>
+                <v-tooltip location="bottom" text="Mostrar/ocultar marcações">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      :color="viewerControls.state.value.showMarkers ? 'primary' : 'default'"
+                      :icon="viewerControls.state.value.showMarkers ? 'mdi-eye' : 'mdi-eye-off'"
+                      size="small"
+                      variant="text"
+                      @click="viewerControls.state.value.showMarkers = !viewerControls.state.value.showMarkers"
+                    />
+                  </template>
+                </v-tooltip>
+              </div>
+            </div>
+
+            <!-- Annotations List -->
+            <div class="annotations-scroll">
+              <div v-if="annotations.length > 0" class="annotations-list pa-3">
+                <div
+                  v-for="annotation in annotations"
+                  :key="annotation.id"
+                  class="roi-card"
+                  :class="{
+                    'has-unread': annotation.unreadCount > 0,
+                    'is-resolved': annotation.status === 'resolved'
+                  }"
+                  @click="selectAnnotation(annotation)"
+                >
+                  <!-- ROI Preview & Color -->
+                  <div class="roi-color-indicator" :style="{ backgroundColor: annotation.color }" />
+
+                  <div class="roi-content">
+                    <!-- Header Row -->
+                    <div class="d-flex align-center justify-space-between mb-1">
+                      <div class="d-flex align-center ga-2">
+                        <v-icon :color="annotation.color" size="16">
+                          {{ annotation.type === 'rectangle' ? 'mdi-vector-square' : annotation.type === 'arrow' ?
+                            'mdi-arrow-top-right' : 'mdi-draw' }}
+                        </v-icon>
+                        <span class="roi-name">{{ annotation.name }}</span>
+                      </div>
+                      <div class="d-flex align-center ga-1">
+                        <v-chip
+                          class="priority-chip"
+                          :color="getPriorityColor(annotation.priority)"
+                          size="x-small"
+                          variant="flat"
+                        >
+                          {{ annotation.priority === 'urgent' ? '!' : annotation.priority === 'high' ? '!!' : '' }}
+                        </v-chip>
+                        <v-badge
+                          v-if="annotation.unreadCount > 0"
+                          class="unread-badge"
+                          color="error"
+                          :content="annotation.unreadCount"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Status & Participants -->
+                    <div class="d-flex align-center justify-space-between">
+                      <v-chip
+                        :color="annotation.status === 'resolved' ? 'success' :
+                          annotation.status === 'pending-review' ? 'warning' : 'info'"
+                        size="x-small"
+                        variant="tonal"
+                      >
+                        {{ getStatusLabel(annotation.status) }}
+                      </v-chip>
+
+                      <!-- Participants Avatars -->
+                      <div class="participants-avatars">
+                        <v-avatar
+                          v-for="(participant, idx) in annotation.participants.slice(0, 3)"
+                          :key="participant.id"
+                          class="participant-avatar"
+                          :color="participant.role === 'ai' ? 'secondary' : 'primary'"
+                          size="22"
+                          :style="{ marginLeft: idx > 0 ? '-8px' : '0', zIndex: 3 - idx }"
+                        >
+                          <v-icon v-if="participant.role === 'ai'" size="14">mdi-robot</v-icon>
+                          <span v-else class="text-caption font-weight-bold">{{ participant.name.charAt(0) }}</span>
+                        </v-avatar>
+                        <v-avatar
+                          v-if="annotation.participants.length > 3"
+                          class="participant-avatar"
+                          color="grey-darken-1"
+                          size="22"
+                          style="margin-left: -8px"
+                        >
+                          <span class="text-caption">+{{ annotation.participants.length - 3 }}</span>
+                        </v-avatar>
+                      </div>
+                    </div>
+
+                    <!-- Last Message Preview -->
+                    <div v-if="getLastMessage(annotation)" class="last-message mt-2">
+                      <div class="d-flex align-center ga-1 text-caption text-medium-emphasis">
+                        <v-icon size="12">{{ getLastMessage(annotation)?.authorId ===
+                          'ai-pathologist' ? 'mdi-robot' : 'mdi-account' }}</v-icon>
+                        <span class="message-preview">
+                          {{ getLastMessage(annotation)?.content.substring(0, 50) }}{{
+                            (getLastMessage(annotation)?.content.length ?? 0) > 50 ? '...' : '' }}
+                        </span>
+                      </div>
+                      <span class="message-time">{{ formatDate(annotation.updatedAt) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Empty State -->
+              <div v-else class="empty-state-container">
+                <div class="empty-state-content">
+                  <div class="empty-icon-wrapper">
+                    <v-icon class="empty-icon" color="primary" size="48">mdi-selection-marker</v-icon>
+                  </div>
+                  <h3 class="text-subtitle-1 font-weight-medium mb-1">Nenhuma região marcada</h3>
+                  <p class="text-caption text-medium-emphasis text-center mb-4">
+                    Selecione uma área de interesse na lâmina para iniciar uma discussão colaborativa
+                  </p>
+                  <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal">
+                    Criar ROI
+                  </v-btn>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Discussion View (quando uma anotação está selecionada) -->
+          <div v-else class="discussion-panel">
+            <!-- Discussion Header -->
+            <div class="discussion-header">
+              <div class="d-flex align-center ga-2 px-3 py-2">
+                <v-btn icon size="small" variant="text" @click="closeDiscussion">
+                  <v-icon>mdi-arrow-left</v-icon>
+                </v-btn>
+                <div class="roi-indicator" :style="{ backgroundColor: selectedAnnotation.color }" />
+                <div class="flex-grow-1">
+                  <v-text-field
+                    v-if="isEditingAnnotationName"
+                    v-model="editingAnnotationName"
+                    autofocus
+                    class="annotation-name-input"
+                    density="compact"
+                    hide-details
+                    variant="plain"
+                    @blur="saveAnnotationName"
+                    @keyup.enter="saveAnnotationName"
+                    @keyup.escape="cancelEditAnnotationName"
+                  />
+                  <div
+                    v-else
+                    class="text-subtitle-2 font-weight-medium editable-name"
+                    @click="startEditAnnotationName"
+                  >
+                    {{ selectedAnnotation.name }}
+                    <v-icon class="edit-icon" size="14">mdi-pencil</v-icon>
+                  </div>
+                  <div class="d-flex align-center ga-2">
+                    <div class="text-caption text-medium-emphasis">
+                      {{ selectedAnnotation.participants.length }} participantes
+                    </div>
+                    <v-chip
+                      v-if="selectedAnnotation.status === 'resolved'"
+                      color="success"
+                      prepend-icon="mdi-check-circle"
+                      size="x-small"
+                      variant="tonal"
+                    >
+                      Resolvido
+                    </v-chip>
+                  </div>
+                </div>
+                <v-menu>
+                  <template #activator="{ props }">
+                    <v-btn icon size="small" variant="text" v-bind="props">
+                      <v-icon>mdi-dots-vertical</v-icon>
+                    </v-btn>
+                  </template>
+                  <v-list density="compact">
+                    <v-list-item
+                      prepend-icon="mdi-eye"
+                      title="Ir para região"
+                      @click="focusAnnotation(selectedAnnotation.id)"
+                    />
+                    <v-list-item
+                      prepend-icon="mdi-account-plus"
+                      title="Convidar patologista"
+                      @click="openInviteDialog"
+                    />
+                    <v-list-item
+                      :prepend-icon="selectedAnnotation.status === 'resolved' ? 'mdi-restore' : 'mdi-check-circle'"
+                      :title="selectedAnnotation.status === 'resolved' ? 'Reabrir discussão' : 'Marcar como resolvido'"
+                      @click="toggleAnnotationResolved"
+                    />
+                    <v-divider />
+                    <v-list-item
+                      class="text-error"
+                      prepend-icon="mdi-delete"
+                      title="Excluir ROI"
+                      @click="deleteSelectedROI"
+                    />
+                  </v-list>
+                </v-menu>
+              </div>
+
+              <!-- Participants Bar -->
+              <div class="participants-bar px-3 pb-2">
+                <div class="d-flex align-center ga-1 flex-wrap">
+                  <v-chip
+                    v-for="participant in selectedAnnotation.participants"
+                    :key="participant.id"
+                    class="participant-chip"
+                    :color="participant.role === 'ai' ? 'secondary' : participant.role === 'owner' ? 'primary' : 'default'"
+                    size="small"
+                    :variant="participant.isOnline ? 'flat' : 'outlined'"
+                  >
+                    <template #prepend>
+                      <v-icon v-if="participant.role === 'ai'" size="14">mdi-robot</v-icon>
+                      <v-badge v-else :color="participant.isOnline ? 'success' : 'grey'" dot inline>
+                        <v-icon size="14">mdi-account</v-icon>
+                      </v-badge>
+                    </template>
+                    {{ participant.name.split(' ')[0] }}
+                  </v-chip>
+                </div>
+              </div>
+            </div>
+
+            <!-- Messages Thread -->
+            <div class="messages-container">
+              <div class="messages-scroll">
+                <div
+                  v-for="message in selectedAnnotation.messages"
+                  :key="message.id"
+                  class="message-wrapper"
+                  :class="{ 'message-own': message.authorId === currentUser.id, 'message-ai': message.authorId === 'ai-pathologist' }"
+                >
+
+                  <!-- System Message -->
+                  <div v-if="message.type === 'system'" class="system-message">
+                    <v-icon class="mr-1" size="14">mdi-information</v-icon>
+                    {{ message.content }}
+                  </div>
+
+                  <!-- Regular or AI Message -->
+                  <div
+                    v-else
+                    class="message-bubble"
+                    :class="{
+                      'ai-bubble': message.authorId === 'ai-pathologist',
+                      'own-bubble': message.authorId === currentUser.id
+                    }"
+                  >
+                    <!-- Author Header (for non-own messages) -->
+                    <div v-if="message.authorId !== currentUser.id" class="message-author">
+                      <v-avatar
+                        class="mr-2"
+                        :color="message.authorId === 'ai-pathologist' ? 'secondary' : 'primary'"
+                        size="24"
+                      >
+                        <v-icon v-if="message.authorId === 'ai-pathologist'" size="14">mdi-robot</v-icon>
+                        <span v-else class="text-caption">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
+                      </v-avatar>
+                      <span class="author-name">{{ getParticipant(message.authorId)?.name }}</span>
+                      <span v-if="message.authorId === 'ai-pathologist'" class="ai-badge">IA</span>
+                    </div>
+
+                    <!-- Message Content -->
+                    <div class="message-content">{{ message.content }}</div>
+
+                    <!-- AI Analysis Card -->
+                    <div
+                      v-if="(message.type === 'ai-analysis' || message.type === 'ai-suggestion') && message.aiFindings"
+                      class="ai-findings-card"
+                    >
+                      <div v-if="message.aiConfidence" class="confidence-bar">
+                        <div class="d-flex align-center justify-space-between mb-1">
+                          <span class="text-caption">Confiança da análise</span>
+                          <span class="confidence-value">{{ message.aiConfidence }}%</span>
+                        </div>
+                        <v-progress-linear color="secondary" height="4" :model-value="message.aiConfidence" rounded />
+                      </div>
+
+                      <div class="findings-list">
+                        <div v-for="(finding, idx) in message.aiFindings" :key="idx" class="finding-item">
+                          <div class="finding-label">
+                            <v-icon
+                              v-if="finding.severity === 'high'"
+                              class="mr-1"
+                              color="error"
+                              size="12"
+                            >mdi-alert-circle</v-icon>
+                            <v-icon
+                              v-else-if="finding.severity === 'medium'"
+                              class="mr-1"
+                              color="warning"
+                              size="12"
+                            >mdi-alert</v-icon>
+                            {{ finding.label }}
+                          </div>
+                          <div class="finding-value">{{ finding.value }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Timestamp -->
+                    <div class="message-time">{{ formatTime(message.timestamp) }}</div>
+                  </div>
+                </div>
+
+                <!-- AI Typing Indicator -->
+                <div v-if="isSendingMessage" class="message-wrapper message-ai">
+                  <div class="message-bubble ai-bubble typing-bubble">
+                    <div class="message-author">
+                      <v-avatar class="mr-2" color="secondary" size="24">
+                        <v-icon size="14">mdi-robot</v-icon>
+                      </v-avatar>
+                      <span class="author-name">PathAI Assistant</span>
+                      <span class="ai-badge">IA</span>
+                    </div>
+                    <div class="typing-indicator">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="ai-chat-input-container">
+              <v-btn
+                :color="aiAgentEnabled ? 'secondary' : 'default'"
+                icon
+                size="small"
+                :variant="aiAgentEnabled ? 'flat' : 'outlined'"
+                @click="aiAgentEnabled = !aiAgentEnabled"
+              >
+                <v-icon>{{ aiAgentEnabled ? 'mdi-robot' : 'mdi-robot-off' }}</v-icon>
+                <v-tooltip activator="parent" location="top">
+                  {{ aiAgentEnabled ? 'IA participando da discussão' : 'IA desativada (clique para ativar)' }}
+                </v-tooltip>
+              </v-btn>
+              <v-textarea
+                v-model="newMessage"
+                auto-grow
+                class="ai-chat-input"
+                density="compact"
+                hide-details
+                max-rows="4"
+                :placeholder="aiAgentEnabled ? 'Digite sua observação...' : 'Discussão sem IA...'"
+                rows="1"
+                variant="outlined"
+                @keydown.enter.exact.prevent="sendMessage"
+              />
+              <v-btn
+                class="ai-send-btn"
+                color="primary"
+                :disabled="!newMessage.trim()"
+                icon
+                :loading="isSendingMessage"
+                @click="sendMessage"
+              >
+                <v-icon>mdi-send</v-icon>
+              </v-btn>
+            </div>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- AI Case Discussion Section -->
+        <v-tabs-window-item value="ai">
+          <div class="ai-chat-panel">
+            <!-- AI Chat Header -->
+            <div class="ai-chat-header">
+              <div class="d-flex align-center ga-3 px-4 py-3">
+                <v-avatar color="secondary" size="40">
+                  <v-icon size="24">mdi-robot</v-icon>
+                </v-avatar>
+                <div class="flex-grow-1">
+                  <div class="text-subtitle-2 font-weight-medium">Assistente de Patologia</div>
+                  <div class="text-caption text-medium-emphasis d-flex align-center ga-1">
+                    <span class="ai-status-dot" />
+                    Análise geral do caso
+                  </div>
+                </div>
+                <v-btn icon size="small" variant="text">
+                  <v-icon>mdi-refresh</v-icon>
+                  <v-tooltip activator="parent" location="bottom">Nova análise</v-tooltip>
+                </v-btn>
+              </div>
+
+              <!-- Case Context Bar -->
+              <div class="case-context-bar">
+                <div class="context-item">
+                  <v-icon size="14">mdi-folder-open</v-icon>
+                  <span>{{ viewerControls.state.value.caseName || 'Caso atual' }}</span>
+                </div>
+                <div class="context-divider" />
+                <div class="context-item">
+                  <v-icon size="14">mdi-image-outline</v-icon>
+                  <span>{{ currentSlideName }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Messages Container -->
+            <div class="ai-messages-container">
+              <div class="ai-messages-scroll">
+                <!-- Welcome/Initial Analysis Message -->
+                <div v-if="aiCaseMessages.length === 0" class="ai-welcome-message">
+                  <div class="welcome-icon">
+                    <v-icon color="secondary" size="48">mdi-brain</v-icon>
+                  </div>
+                  <h3 class="text-subtitle-1 font-weight-medium mb-2">Análise do Caso</h3>
+                  <p class="text-caption text-medium-emphasis text-center mb-4">
+                    Inicie uma conversa para discutir o caso como um todo.
+                    A IA analisará a lâmina completa e fornecerá insights diagnósticos.
+                  </p>
+                  <v-btn
+                    color="secondary"
+                    prepend-icon="mdi-play"
+                    variant="tonal"
+                    @click="startAICaseAnalysis"
+                  >
+                    Iniciar Análise
+                  </v-btn>
+                </div>
+
+                <!-- Messages List -->
+                <div
+                  v-for="message in aiCaseMessages"
+                  :key="message.id"
+                  class="ai-case-message-wrapper"
+                  :class="{ 'message-own': message.authorId === currentUser.id }"
+                >
+                  <!-- AI Message -->
+                  <div
+                    v-if="message.authorId === 'ai-pathologist'"
+                    class="ai-case-message ai-message"
+                  >
+                    <div class="message-header">
+                      <v-avatar color="secondary" size="28">
+                        <v-icon size="16">mdi-robot</v-icon>
+                      </v-avatar>
+                      <span class="author-name">PathAI Assistant</span>
+                      <span class="ai-badge-minimal">IA</span>
+                    </div>
+                    <div class="message-body">{{ message.content }}</div>
+
+                    <!-- AI Findings Card -->
+                    <div v-if="message.aiFindings && message.aiFindings.length > 0" class="ai-case-findings">
+                      <div v-if="message.aiConfidence" class="confidence-indicator">
+                        <span class="confidence-label">Confiança</span>
+                        <div class="confidence-bar-container">
+                          <div class="confidence-bar-fill" :style="{ width: message.aiConfidence + '%' }" />
+                        </div>
+                        <span class="confidence-value">{{ message.aiConfidence }}%</span>
+                      </div>
+                      <div class="findings-grid">
+                        <div v-for="(finding, idx) in message.aiFindings" :key="idx" class="finding-item-minimal">
+                          <div class="finding-label-minimal">
+                            <v-icon v-if="finding.severity === 'high'" color="error" size="12">mdi-alert-circle</v-icon>
+                            <v-icon v-else-if="finding.severity === 'medium'" color="warning" size="12">mdi-alert</v-icon>
+                            {{ finding.label }}
+                          </div>
+                          <div class="finding-value-minimal">{{ finding.value }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="message-timestamp">{{ formatTime(message.timestamp) }}</div>
+                  </div>
+
+                  <!-- User Message -->
+                  <div v-else class="ai-case-message user-message">
+                    <div class="message-body">{{ message.content }}</div>
+                    <div class="message-timestamp">{{ formatTime(message.timestamp) }}</div>
+                  </div>
+                </div>
+
+                <!-- AI Typing Indicator -->
+                <div v-if="isAICaseTyping" class="ai-case-message-wrapper">
+                  <div class="ai-case-message ai-message typing">
+                    <div class="message-header">
+                      <v-avatar color="secondary" size="28">
+                        <v-icon size="16">mdi-robot</v-icon>
+                      </v-avatar>
+                      <span class="author-name">PathAI Assistant</span>
+                    </div>
+                    <div class="ai-typing-indicator">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Chat Input -->
+            <div class="ai-chat-input-container">
+              <v-textarea
+                v-model="aiCaseNewMessage"
+                auto-grow
+                class="ai-chat-input"
+                density="compact"
+                hide-details
+                max-rows="4"
+                placeholder="Pergunte sobre o caso..."
+                rows="1"
+                variant="outlined"
+                @keydown.enter.exact.prevent="sendAICaseMessage"
+              />
+              <v-btn
+                class="ai-send-btn"
+                color="secondary"
+                :disabled="!aiCaseNewMessage.trim()"
+                icon
+                :loading="isAICaseTyping"
+                @click="sendAICaseMessage"
+              >
+                <v-icon>mdi-send</v-icon>
+              </v-btn>
+            </div>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- Report Section (Laudo) -->
+        <v-tabs-window-item value="report">
+          <div class="report-panel">
+            <!-- Report Header -->
+            <div class="report-header px-4 py-3">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center ga-2">
+                  <v-icon color="primary" size="20">mdi-file-document-edit</v-icon>
+                  <span class="text-subtitle-2 font-weight-medium">Laudo do Caso</span>
+                </div>
+                <v-chip
+                  :color="reportStatusColor"
+                  size="small"
+                  variant="tonal"
+                >
+                  {{ reportStatusLabel }}
+                </v-chip>
+              </div>
+            </div>
+
+            <v-divider />
+
+            <!-- Report Form -->
+            <div class="report-form-scroll">
+              <div class="report-form pa-4">
+                <!-- AI Suggestion -->
+                <div v-if="viewerControls.state.value.caseName" class="ai-suggestion-card mb-4">
+                  <div class="d-flex align-center ga-2 mb-2">
+                    <v-icon color="accent" size="18">mdi-robot</v-icon>
+                    <span class="text-caption font-weight-medium">Sugestão da IA</span>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis ai-suggestion-text">
+                    {{ aiSuggestion.diagnosis || 'Analisando características morfológicas... A IA gerará uma sugestão após análise completa das lâminas.' }}
+                  </p>
+                  <v-btn
+                    v-if="aiSuggestion.diagnosis"
+                    class="mt-2"
+                    color="accent"
+                    size="small"
+                    variant="text"
+                    @click="applyAiSuggestion"
+                  >
+                    <v-icon class="mr-1" size="16">mdi-magic-staff</v-icon>
+                    Usar como base
+                  </v-btn>
+                </div>
+
+                <!-- Microscopic Description -->
+                <v-textarea
+                  v-model="reportForm.microscopicDescription"
+                  auto-grow
+                  class="mb-4"
+                  hide-details
+                  label="Descrição Microscópica"
+                  placeholder="Descreva os achados microscópicos observados nas lâminas..."
+                  rows="3"
+                  variant="outlined"
+                />
+
+                <!-- Main Diagnosis -->
+                <v-textarea
+                  v-model="reportForm.diagnosis"
+                  auto-grow
+                  class="mb-4"
+                  hide-details
+                  label="Diagnóstico Principal"
+                  placeholder="Ex: Adenocarcinoma moderadamente diferenciado"
+                  rows="2"
+                  variant="outlined"
+                />
+
+                <!-- Conclusion -->
+                <v-textarea
+                  v-model="reportForm.conclusion"
+                  auto-grow
+                  class="mb-4"
+                  hide-details
+                  label="Conclusão"
+                  placeholder="Conclusão diagnóstica detalhada..."
+                  rows="3"
+                  variant="outlined"
+                />
+
+                <!-- Additional Notes -->
+                <v-textarea
+                  v-model="reportForm.notes"
+                  auto-grow
+                  class="mb-4"
+                  hide-details
+                  label="Observações Adicionais (opcional)"
+                  placeholder="Notas, recomendações ou informações complementares..."
+                  rows="2"
+                  variant="outlined"
+                />
+
+                <!-- Request Additional Exams -->
+                <v-checkbox
+                  v-model="reportForm.requestAdditionalExams"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  label="Solicitar exames complementares"
+                />
+
+                <v-expand-transition>
+                  <div v-if="reportForm.requestAdditionalExams" class="mt-2 mb-4">
+                    <v-textarea
+                      v-model="reportForm.additionalExamsDetails"
+                      auto-grow
+                      hide-details
+                      label="Quais exames?"
+                      placeholder="Descreva os exames complementares necessários..."
+                      rows="2"
+                      variant="outlined"
+                    />
+                  </div>
+                </v-expand-transition>
+              </div>
+            </div>
+
+            <!-- Report Actions -->
+            <div class="report-export-actions pa-4">
+              <!-- Conclude Report Button (when not concluded) -->
+              <template v-if="reportStatus !== 'concluido'">
+                <v-btn
+                  block
+                  color="success"
+                  :disabled="!canConcludeReport"
+                  prepend-icon="mdi-check-decagram"
+                  size="large"
+                  variant="elevated"
+                  @click="concludeReport"
+                >
+                  Concluir Laudo
+                </v-btn>
+                <p v-if="!canConcludeReport" class="text-caption text-center text-medium-emphasis mt-2">
+                  Preencha a descrição e o diagnóstico para concluir
+                </p>
+              </template>
+
+              <!-- Update Report Button (when concluded but has changes) -->
+              <template v-else-if="reportHasUnsavedChanges">
+                <v-btn
+                  block
+                  color="primary"
+                  prepend-icon="mdi-content-save-check"
+                  size="large"
+                  variant="elevated"
+                  @click="updateReport"
+                >
+                  Atualizar Laudo
+                </v-btn>
+                <p class="text-caption text-center text-medium-emphasis mt-2">
+                  Você fez alterações no laudo concluído
+                </p>
+              </template>
+
+              <!-- Export Options (when concluded and no changes) -->
+              <template v-else>
+                <div class="concluded-badge mb-3">
+                  <v-icon color="success" size="18">mdi-check-decagram</v-icon>
+                  <span>Laudo Concluído</span>
+                </div>
+                <div class="text-overline text-medium-emphasis mb-3">Exportar Laudo</div>
+                <div class="d-flex ga-2">
+                  <v-btn
+                    class="flex-grow-1"
+                    color="primary"
+                    prepend-icon="mdi-file-pdf-box"
+                    variant="tonal"
+                    @click="exportReportPdf"
+                  >
+                    PDF
+                  </v-btn>
+                  <v-btn
+                    class="flex-grow-1"
+                    prepend-icon="mdi-file-word"
+                    variant="tonal"
+                    @click="exportReportDoc"
+                  >
+                    DOC
+                  </v-btn>
+                  <v-btn
+                    class="flex-grow-1"
+                    prepend-icon="mdi-printer"
+                    variant="tonal"
+                    @click="printReport"
+                  >
+                    Imprimir
+                  </v-btn>
+                </div>
+              </template>
+            </div>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- Details Section -->
+        <v-tabs-window-item value="details">
+          <v-container>
+            <div class="text-overline text-medium-emphasis mb-3">Informações da Lâmina</div>
+
+            <div class="details-card">
+              <template v-for="(detail, index) in slideDetails" :key="detail.label">
+                <div class="detail-item">
+                  <div class="detail-row">
+                    <span class="detail-label text-caption text-medium-emphasis">{{ detail.label }}</span>
+                    <span class="detail-value text-body-2 font-weight-medium">{{ detail.value }}</span>
+                  </div>
+                </div>
+                <v-divider v-if="index < slideDetails.length - 1" />
+              </template>
+            </div>
+          </v-container>
+        </v-tabs-window-item>
+      </v-tabs-window>
+
+    </v-navigation-drawer>
+
+    <!-- Mobile Bottom Sheet Panel -->
+    <v-bottom-sheet v-if="mobile" v-model="mobilePanel" class="mobile-panel-sheet" inset>
+      <v-card class="mobile-panel-card">
+        <!-- Sheet Handle -->
+        <div class="sheet-handle">
+          <div class="handle-bar" />
+        </div>
+
+        <!-- Mobile Tabs -->
+        <v-tabs
+          v-model="activeTab"
+          color="primary"
+          density="compact"
+          grow
+          height="48"
+        >
+          <v-tab value="annotations">
+            <v-icon size="20">mdi-map-marker</v-icon>
+            <span class="ml-1 text-caption">Notas</span>
+          </v-tab>
+          <v-tab value="ai">
+            <v-icon size="20">mdi-robot</v-icon>
+            <span class="ml-1 text-caption">IA</span>
+          </v-tab>
+          <v-tab value="report">
+            <v-icon size="20">mdi-file-document-edit</v-icon>
+            <span class="ml-1 text-caption">Laudo</span>
+          </v-tab>
+          <v-tab value="details">
+            <v-icon size="20">mdi-information</v-icon>
+            <span class="ml-1 text-caption">Detalhes</span>
+          </v-tab>
+        </v-tabs>
+
+        <v-divider />
+
+        <!-- Mobile Panel Content -->
+        <div class="mobile-panel-content">
+          <v-tabs-window v-model="activeTab">
+            <!-- Mobile Annotations -->
+            <v-tabs-window-item value="annotations">
+              <div v-if="!selectedAnnotation" class="mobile-annotations-list">
+                <div v-if="annotations.length > 0" class="pa-3">
+                  <div
+                    v-for="annotation in annotations"
+                    :key="annotation.id"
+                    class="mobile-roi-card"
+                    @click="selectAnnotation(annotation)"
+                  >
+                    <div class="roi-color-dot" :style="{ backgroundColor: annotation.color }" />
+                    <div class="roi-info">
+                      <span class="roi-name">{{ annotation.name }}</span>
+                      <span class="roi-status">{{ getStatusLabel(annotation.status) }}</span>
+                    </div>
+                    <v-badge v-if="annotation.unreadCount > 0" color="error" :content="annotation.unreadCount" inline />
+                    <v-icon size="16">mdi-chevron-right</v-icon>
+                  </div>
+                </div>
+                <div v-else class="mobile-empty-state">
+                  <v-icon color="primary" size="40">mdi-selection-marker</v-icon>
+                  <p class="text-caption text-medium-emphasis mt-2">Nenhuma região marcada</p>
+                </div>
+              </div>
+              <div v-else class="mobile-discussion">
+                <div class="mobile-discussion-header">
+                  <v-btn icon size="small" variant="text" @click="closeDiscussion">
+                    <v-icon>mdi-arrow-left</v-icon>
+                  </v-btn>
+                  <div class="roi-color-dot" :style="{ backgroundColor: selectedAnnotation.color }" />
+                  <div class="mobile-roi-name-container">
+                    <v-text-field
+                      v-if="isEditingAnnotationName"
+                      v-model="editingAnnotationName"
+                      autofocus
+                      class="mobile-roi-name-input"
+                      density="compact"
+                      hide-details
+                      variant="plain"
+                      @blur="saveAnnotationName"
+                      @keyup.enter="saveAnnotationName"
+                      @keyup.escape="cancelEditAnnotationName"
+                    />
+                    <div
+                      v-else
+                      class="mobile-roi-name-editable"
+                      @click="startEditAnnotationName"
+                    >
+                      <span class="font-weight-medium">{{ selectedAnnotation.name }}</span>
+                      <v-icon class="ml-1" size="14">mdi-pencil</v-icon>
+                    </div>
+                  </div>
+                  <!-- Mobile ROI Action Buttons -->
+                  <div class="mobile-roi-actions">
+                    <v-btn
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="focusAnnotation(selectedAnnotation.id); mobilePanel = false"
+                    >
+                      <v-icon size="18">mdi-crosshairs-gps</v-icon>
+                      <v-tooltip activator="parent" location="bottom">Ir para região</v-tooltip>
+                    </v-btn>
+                    <v-btn
+                      color="error"
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="deleteSelectedROI"
+                    >
+                      <v-icon size="18">mdi-delete</v-icon>
+                      <v-tooltip activator="parent" location="bottom">Excluir ROI</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div class="mobile-messages">
+                  <div
+                    v-for="message in selectedAnnotation.messages.slice(-5)"
+                    :key="message.id"
+                    class="mobile-message"
+                    :class="{ 'own': message.authorId === currentUser.id, 'ai': message.authorId === 'ai-pathologist' }"
+                  >
+                    <div v-if="message.authorId !== currentUser.id" class="mobile-message-author">
+                      <v-avatar
+                        :color="message.authorId === 'ai-pathologist' ? 'secondary' : 'primary'"
+                        size="20"
+                      >
+                        <v-icon v-if="message.authorId === 'ai-pathologist'" size="12">mdi-robot</v-icon>
+                        <span v-else class="text-caption">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
+                      </v-avatar>
+                      <span class="mobile-author-name">{{ getParticipant(message.authorId)?.name.split(' ')[0] }}</span>
+                    </div>
+                    <span class="message-text">{{ message.content }}</span>
+                  </div>
+                </div>
+                <div class="mobile-input-row">
+                  <v-btn
+                    :color="aiAgentEnabled ? 'secondary' : 'default'"
+                    icon
+                    size="x-small"
+                    :variant="aiAgentEnabled ? 'flat' : 'outlined'"
+                    @click="aiAgentEnabled = !aiAgentEnabled"
+                  >
+                    <v-icon size="16">{{ aiAgentEnabled ? 'mdi-robot' : 'mdi-robot-off' }}</v-icon>
+                  </v-btn>
+                  <v-text-field
+                    v-model="newMessage"
+                    class="mobile-message-input"
+                    density="compact"
+                    hide-details
+                    placeholder="Mensagem..."
+                    variant="outlined"
+                    @keydown.enter="sendMessage"
+                  />
+                  <v-btn color="primary" icon size="small" @click="sendMessage">
+                    <v-icon size="18">mdi-send</v-icon>
+                  </v-btn>
+                </div>
+              </div>
+            </v-tabs-window-item>
+
+            <!-- Mobile AI Chat -->
+            <v-tabs-window-item value="ai">
+              <div class="mobile-ai-chat">
+                <div v-if="aiCaseMessages.length === 0" class="mobile-empty-state">
+                  <v-icon color="secondary" size="40">mdi-brain</v-icon>
+                  <p class="text-caption text-medium-emphasis mt-2">Análise do caso</p>
+                  <v-btn
+                    class="mt-2"
+                    color="secondary"
+                    size="small"
+                    variant="tonal"
+                    @click="startAICaseAnalysis"
+                  >
+                    Iniciar
+                  </v-btn>
+                </div>
+                <template v-else>
+                  <div class="mobile-ai-messages">
+                    <div
+                      v-for="message in aiCaseMessages.slice(-5)"
+                      :key="message.id"
+                      class="mobile-message"
+                      :class="{ 'own': message.authorId === currentUser.id, 'ai': message.authorId === 'ai-pathologist' }"
+                    >
+                      <span class="message-text">{{ message.content }}</span>
+                    </div>
+                  </div>
+                  <div class="mobile-input-row">
+                    <v-text-field
+                      v-model="aiCaseNewMessage"
+                      class="mobile-message-input"
+                      density="compact"
+                      hide-details
+                      placeholder="Pergunte sobre o caso..."
+                      variant="outlined"
+                      @keydown.enter="sendAICaseMessage"
+                    />
+                    <v-btn color="secondary" icon size="small" @click="sendAICaseMessage">
+                      <v-icon size="18">mdi-send</v-icon>
+                    </v-btn>
+                  </div>
+                </template>
+              </div>
+            </v-tabs-window-item>
+
+            <!-- Mobile Report (Laudo) -->
+            <v-tabs-window-item value="report">
+              <div class="mobile-report pa-3">
+                <!-- AI Suggestion compact -->
+                <div class="mobile-ai-suggestion mb-3">
+                  <div class="d-flex align-center justify-space-between mb-1">
+                    <div class="d-flex align-center ga-1">
+                      <v-icon color="accent" size="16">mdi-robot</v-icon>
+                      <span class="text-caption font-weight-medium">Sugestão IA</span>
+                    </div>
+                    <v-btn
+                      v-if="aiSuggestion.diagnosis"
+                      color="accent"
+                      size="x-small"
+                      variant="text"
+                      @click="applyAiSuggestion"
+                    >
+                      <v-icon class="mr-1" size="14">mdi-magic-staff</v-icon>
+                      Usar
+                    </v-btn>
+                  </div>
+                  <p class="text-caption text-medium-emphasis">
+                    {{ aiSuggestion.diagnosis || 'Aguardando análise...' }}
+                  </p>
+                </div>
+
+                <v-textarea
+                  v-model="reportForm.microscopicDescription"
+                  auto-grow
+                  class="mb-3"
+                  density="compact"
+                  hide-details
+                  label="Descrição Microscópica"
+                  rows="2"
+                  variant="outlined"
+                />
+
+                <v-textarea
+                  v-model="reportForm.diagnosis"
+                  auto-grow
+                  class="mb-3"
+                  density="compact"
+                  hide-details
+                  label="Diagnóstico"
+                  rows="2"
+                  variant="outlined"
+                />
+
+                <v-textarea
+                  v-model="reportForm.conclusion"
+                  auto-grow
+                  class="mb-3"
+                  density="compact"
+                  hide-details
+                  label="Conclusão"
+                  rows="2"
+                  variant="outlined"
+                />
+
+                <!-- Conclude/Update/Export Actions -->
+                <div class="mobile-report-actions">
+                  <!-- Conclude Report Button (when not concluded) -->
+                  <template v-if="reportStatus !== 'concluido'">
+                    <v-btn
+                      block
+                      color="success"
+                      :disabled="!canConcludeReport"
+                      size="small"
+                      @click="concludeReport"
+                    >
+                      <v-icon class="mr-1" size="16">mdi-check-decagram</v-icon>
+                      Concluir Laudo
+                    </v-btn>
+                    <p v-if="!canConcludeReport" class="text-caption text-center text-medium-emphasis mt-1">
+                      Preencha descrição e diagnóstico
+                    </p>
+                  </template>
+
+                  <!-- Update Report Button (when concluded but has changes) -->
+                  <template v-else-if="reportHasUnsavedChanges">
+                    <v-btn
+                      block
+                      color="primary"
+                      size="small"
+                      @click="updateReport"
+                    >
+                      <v-icon class="mr-1" size="16">mdi-content-save-check</v-icon>
+                      Atualizar Laudo
+                    </v-btn>
+                  </template>
+
+                  <!-- Export Options (when concluded and no changes) -->
+                  <template v-else>
+                    <div class="mobile-concluded-badge mb-2">
+                      <v-icon color="success" size="16">mdi-check-decagram</v-icon>
+                      <span>Laudo Concluído</span>
+                    </div>
+                    <div class="d-flex ga-2">
+                      <v-btn
+                        class="flex-grow-1"
+                        color="primary"
+                        size="small"
+                        variant="tonal"
+                        @click="exportReportPdf"
+                      >
+                        <v-icon size="16">mdi-file-pdf-box</v-icon>
+                      </v-btn>
+                      <v-btn class="flex-grow-1" size="small" variant="tonal" @click="exportReportDoc">
+                        <v-icon size="16">mdi-file-word</v-icon>
+                      </v-btn>
+                      <v-btn class="flex-grow-1" size="small" variant="tonal" @click="printReport">
+                        <v-icon size="16">mdi-printer</v-icon>
+                      </v-btn>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </v-tabs-window-item>
+
+            <!-- Mobile Details -->
+            <v-tabs-window-item value="details">
+              <div class="mobile-details pa-3">
+                <div v-for="detail in slideDetails.slice(0, 6)" :key="detail.label" class="mobile-detail-item">
+                  <span class="detail-label">{{ detail.label }}</span>
+                  <span class="detail-value">{{ detail.value }}</span>
+                </div>
+              </div>
+            </v-tabs-window-item>
+          </v-tabs-window>
+        </div>
+      </v-card>
+    </v-bottom-sheet>
+
+    <!-- Mobile Bottom Navigation -->
+    <v-bottom-navigation v-if="mobile && !focusMode" v-model="mobileNavTab" class="mobile-bottom-nav" grow>
+      <v-btn value="theme" @click="toggleTheme">
+        <v-icon>{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+        <span>{{ isDark ? 'Claro' : 'Escuro' }}</span>
+      </v-btn>
+      <v-btn value="tools" @click="mobileToolsMenu = true">
+        <v-icon>mdi-tools</v-icon>
+        <span>Ferramentas</span>
+      </v-btn>
+      <v-btn value="panel" @click="mobilePanel = true">
+        <v-badge v-if="totalUnread > 0" color="error" :content="totalUnread" floating>
+          <v-icon>mdi-message-text</v-icon>
+        </v-badge>
+        <v-icon v-else>mdi-message-text</v-icon>
+        <span>Painel</span>
+      </v-btn>
+      <v-btn value="focus" @click="toggleFocusMode">
+        <v-icon>mdi-eye</v-icon>
+        <span>Foco</span>
+      </v-btn>
+    </v-bottom-navigation>
+
+    <!-- Mobile Tools Menu -->
+    <v-bottom-sheet v-if="mobile" v-model="mobileToolsMenu" inset>
+      <v-card>
+        <v-card-title class="text-subtitle-2">Ferramentas</v-card-title>
+        <v-divider />
+        <div class="mobile-tools-grid pa-4">
+          <v-btn
+            :color="activeTool === 'pan' ? 'primary' : 'default'"
+            stacked
+            variant="tonal"
+            @click="selectTool('pan'); mobileToolsMenu = false"
+          >
+            <v-icon>mdi-hand-back-right</v-icon>
+            <span class="text-caption">Navegar</span>
+          </v-btn>
+          <v-btn
+            stacked
+            variant="tonal"
+            @click="viewerControls.zoomIn()"
+          >
+            <v-icon>mdi-plus</v-icon>
+            <span class="text-caption">Zoom +</span>
+          </v-btn>
+          <v-btn
+            stacked
+            variant="tonal"
+            @click="viewerControls.zoomOut()"
+          >
+            <v-icon>mdi-minus</v-icon>
+            <span class="text-caption">Zoom -</span>
+          </v-btn>
+          <v-btn
+            stacked
+            variant="tonal"
+            @click="viewerControls.resetView()"
+          >
+            <v-icon>mdi-fit-to-screen</v-icon>
+            <span class="text-caption">Ajustar</span>
+          </v-btn>
+          <v-btn
+            :color="activeTool === 'roi-rect' ? 'primary' : 'default'"
+            stacked
+            variant="tonal"
+            @click="selectTool('roi-rect'); mobileToolsMenu = false"
+          >
+            <v-icon>mdi-vector-square</v-icon>
+            <span class="text-caption">Retângulo</span>
+          </v-btn>
+          <v-btn
+            :color="activeTool === 'roi-arrow' ? 'primary' : 'default'"
+            stacked
+            variant="tonal"
+            @click="selectTool('roi-arrow'); mobileToolsMenu = false"
+          >
+            <v-icon>mdi-arrow-top-right</v-icon>
+            <span class="text-caption">Seta</span>
+          </v-btn>
+          <v-btn
+            :color="activeTool === 'measure' ? 'primary' : 'default'"
+            stacked
+            variant="tonal"
+            @click="selectTool('measure'); mobileToolsMenu = false"
+          >
+            <v-icon>mdi-ruler</v-icon>
+            <span class="text-caption">Medir</span>
+          </v-btn>
+          <v-btn
+            stacked
+            variant="tonal"
+            @click="toggleTheme()"
+          >
+            <v-icon>{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+            <span class="text-caption">Tema</span>
+          </v-btn>
+        </div>
+      </v-card>
+    </v-bottom-sheet>
+
+    <!-- Main Viewer Area -->
+    <v-main class="viewer-main" :class="{ 'viewer-main-mobile': mobile }">
+      <!-- Studio-Grade Floating Toolbar (Desktop Only) -->
+      <div
+        v-if="!mobile"
+        v-show="showToolbar"
+        class="studio-toolbar"
+        :class="{ 'toolbar-hidden': !showToolbar }"
+      >
+        <div class="studio-toolbar-content">
+          <!-- Back to Dashboard Button -->
+          <div class="tool-item">
+            <button class="studio-btn studio-btn-back" @click="goToDashboard">
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-arrow-left</v-icon>
+              <div class="btn-tooltip">Voltar ao Dashboard</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- Theme Toggle Button -->
+          <div class="tool-item">
+            <button class="studio-btn" @click="toggleTheme">
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+              <div class="btn-tooltip">{{ isDark ? 'Modo Claro' : 'Modo Escuro' }}</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- Tool Button: Navigate -->
+          <div class="tool-item">
+            <button class="studio-btn" :class="{ 'is-active': activeTool === 'pan' }" @click="selectTool('pan')">
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-hand-back-right</v-icon>
+              <div class="btn-tooltip">Navegar</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- Zoom Controls -->
+          <div class="tool-item">
+            <button
+              class="studio-btn studio-btn-action"
+              :disabled="!viewerControls.isViewerReady.value"
+              @click="viewerControls.zoomIn"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-plus</v-icon>
+              <div class="btn-tooltip">Ampliar</div>
+            </button>
+          </div>
+
+          <div class="tool-item">
+            <button
+              class="studio-btn studio-btn-action"
+              :disabled="!viewerControls.isViewerReady.value"
+              @click="viewerControls.zoomOut"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-minus</v-icon>
+              <div class="btn-tooltip">Reduzir</div>
+            </button>
+          </div>
+
+          <div class="tool-item">
+            <button
+              class="studio-btn studio-btn-action"
+              :disabled="!viewerControls.isViewerReady.value"
+              @click="viewerControls.resetView"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-fit-to-screen</v-icon>
+              <div class="btn-tooltip">Ajustar</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- ROI Tools -->
+          <div class="tool-item">
+            <button
+              class="studio-btn"
+              :class="{ 'is-active': activeTool === 'roi-rect' }"
+              @click="selectTool('roi-rect')"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-vector-square</v-icon>
+              <div class="btn-tooltip">Retângulo</div>
+            </button>
+          </div>
+
+          <div class="tool-item">
+            <button
+              class="studio-btn"
+              :class="{ 'is-active': activeTool === 'roi-arrow' }"
+              @click="selectTool('roi-arrow')"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-arrow-top-right</v-icon>
+              <div class="btn-tooltip">Seta</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- Measure Tool -->
+          <div class="tool-item">
+            <button
+              class="studio-btn"
+              :class="{ 'is-active': activeTool === 'measure' }"
+              @click="selectTool('measure')"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">mdi-ruler</v-icon>
+              <div class="btn-tooltip">Medir</div>
+            </button>
+          </div>
+
+          <div class="tool-separator" />
+
+          <!-- Focus Mode Toggle -->
+          <div class="tool-item">
+            <button
+              class="studio-btn"
+              :class="{ 'studio-btn-focus-active': focusMode }"
+              @click="toggleFocusMode"
+            >
+              <div class="btn-glow" />
+              <v-icon class="btn-icon">{{ focusMode ? 'mdi-eye-outline' : 'mdi-eye-off-outline' }}</v-icon>
+              <div class="btn-tooltip">{{ focusMode ? 'Sair do Foco' : 'Modo Foco' }}</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel Toggle Button (when closed, Desktop only) -->
+      <v-btn
+        v-if="!mobile && !rightPanel && !focusMode"
+        class="panel-toggle-btn"
+        color="primary"
+        elevation="4"
+        icon
+        size="small"
+        @click="rightPanel = true"
+      >
+        <v-icon>mdi-chevron-left</v-icon>
+        <v-tooltip activator="parent" location="left">Mostrar Painel</v-tooltip>
+      </v-btn>
+
+      <!-- Viewer Container (OpenSeadragon will mount here) -->
+      <div id="viewer-container" class="viewer-container" @mouseleave="onMouseLeave" @mousemove="onMouseMove">
+        <!-- Router view for page content -->
+        <router-view />
+      </div>
+
+      <!-- Fullscreen Exit Button (only in fullscreen) -->
+      <v-btn
+        v-if="isFullscreen"
+        class="fullscreen-exit-btn"
+        color="surface"
+        elevation="4"
+        icon
+        size="small"
+        @click="toggleFullscreen"
+      >
+        <v-icon>mdi-fullscreen-exit</v-icon>
+        <v-tooltip activator="parent" location="left">Sair da Tela Cheia</v-tooltip>
+      </v-btn>
+
+      <!-- Mobile Focus Mode Exit Button -->
+      <v-btn
+        v-if="mobile && focusMode"
+        class="mobile-focus-exit-btn"
+        color="primary"
+        elevation="4"
+        rounded="pill"
+        size="small"
+        @click="toggleFocusMode"
+      >
+        <v-icon start>mdi-eye-outline</v-icon>
+        Sair do Foco
+      </v-btn>
+
+      <!-- Floating Status Card (Google Maps style) -->
+      <div v-show="!focusMode" class="status-card" :class="{ 'status-card-mobile': mobile }">
+        <div class="status-content">
+          <!-- Zoom Info -->
+          <div class="status-item">
+            <v-icon class="status-icon" size="16">mdi-magnify</v-icon>
+            <span v-if="!mobile" class="status-label">Zoom:</span>
+            <strong class="status-value">{{ viewerControls.state.value.zoomLevel }}x</strong>
+          </div>
+
+          <!-- Escala (Desktop only) -->
+          <div v-if="!mobile" class="status-separator" />
+          <div v-if="!mobile" class="status-item">
+            <v-icon class="status-icon" size="16">mdi-ruler</v-icon>
+            <span class="status-label">Escala:</span>
+            <strong class="status-value">{{ viewerControls.state.value.scaleBar }}</strong>
+          </div>
+
+          <!-- Tiles (Desktop only) -->
+          <div v-if="!mobile" class="status-separator" />
+          <div v-if="!mobile" class="status-item">
+            <v-icon class="status-icon" size="16">mdi-image</v-icon>
+            <strong class="status-value">{{ viewerControls.state.value.tilesLoaded }}</strong>
+            <span class="status-label">tiles</span>
+          </div>
+
+          <!-- Loading Indicator -->
+          <div v-if="!viewerControls.isViewerReady.value" class="status-separator" />
+          <div v-if="!viewerControls.isViewerReady.value" class="status-item status-loading">
+            <v-icon class="status-icon mdi-spin" size="16">mdi-loading</v-icon>
+            <span v-if="!mobile" class="status-label">{{ viewerControls.loadingProgress.value }}</span>
+          </div>
+
+          <!-- Coordinates (Desktop only) -->
+          <div v-if="!mobile && viewerControls.state.value.mouseCoords" class="status-separator" />
+          <div v-if="!mobile && viewerControls.state.value.mouseCoords" class="status-item status-coords">
+            <v-icon class="status-icon" size="16">mdi-crosshairs-gps</v-icon>
+            <span class="status-label">
+              X: {{ viewerControls.state.value.mouseCoords.x }},
+              Y: {{ viewerControls.state.value.mouseCoords.y }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </v-main>
+
+    <!-- Delete ROI Confirmation Dialog -->
+    <v-dialog v-model="deleteDialog" max-width="400" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="error">mdi-alert-circle</v-icon>
+          Confirmar Exclusão
+        </v-card-title>
+        <v-card-text>
+          Tem certeza que deseja excluir a região <strong>"{{ roiToDeleteName }}"</strong>?
+          <br><br>
+          Esta ação não pode ser desfeita.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="cancelDeleteROI">
+            Cancelar
+          </v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDeleteROI">
+            Excluir
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Invite Pathologist Dialog -->
+    <v-dialog v-model="inviteDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-account-plus</v-icon>
+          Adicionar Patologista
+        </v-card-title>
+
+        <v-tabs
+          v-model="inviteMode"
+          class="invite-tabs"
+          color="primary"
+          density="comfortable"
+          grow
+        >
+          <v-tab value="select">
+            <v-icon class="mr-2" size="18">mdi-account-group</v-icon>
+            Colaboradores
+          </v-tab>
+          <v-tab value="email">
+            <v-icon class="mr-2" size="18">mdi-email-outline</v-icon>
+            Convidar por E-mail
+          </v-tab>
+        </v-tabs>
+
+        <v-card-text class="pt-4 pb-2">
+          <!-- Select from existing pathologists -->
+          <div v-if="inviteMode === 'select'">
+            <div v-if="availableToInvite.length > 0" class="pathologist-list">
+              <div
+                v-for="pathologist in availableToInvite"
+                :key="pathologist.id"
+                class="pathologist-item"
+                :class="{ 'pathologist-item--selected': selectedPathologists.includes(pathologist.id) }"
+                @click="selectedPathologists.includes(pathologist.id)
+                  ? selectedPathologists = selectedPathologists.filter(id => id !== pathologist.id)
+                  : selectedPathologists.push(pathologist.id)"
+              >
+                <v-checkbox
+                  class="flex-grow-0"
+                  density="compact"
+                  hide-details
+                  :model-value="selectedPathologists.includes(pathologist.id)"
+                  @click.stop="selectedPathologists.includes(pathologist.id)
+                    ? selectedPathologists = selectedPathologists.filter(id => id !== pathologist.id)
+                    : selectedPathologists.push(pathologist.id)"
+                />
+                <v-avatar :color="pathologist.isOnline ? 'primary' : 'grey'" size="36">
+                  <span class="text-white text-caption">{{ pathologist.name.split(' ').map(n => n[0]).slice(0, 2).join('') }}</span>
+                </v-avatar>
+                <div class="pathologist-info">
+                  <div class="pathologist-name">{{ pathologist.name }}</div>
+                  <div class="pathologist-specialty">{{ pathologist.specialty }}</div>
+                </div>
+                <v-chip
+                  :color="pathologist.isOnline ? 'success' : 'grey'"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ pathologist.isOnline ? 'Online' : 'Offline' }}
+                </v-chip>
+              </div>
+            </div>
+            <v-alert
+              v-else
+              color="warning"
+              density="compact"
+              icon="mdi-account-off"
+              variant="tonal"
+            >
+              Todos os colaboradores já participam desta discussão.
+            </v-alert>
+          </div>
+
+          <!-- Invite by email -->
+          <div v-else>
+            <v-text-field
+              v-model="inviteEmail"
+              autofocus
+              class="mb-2"
+              density="comfortable"
+              hide-details="auto"
+              label="E-mail do patologista"
+              placeholder="exemplo@hospital.com"
+              prepend-inner-icon="mdi-email-outline"
+              type="email"
+              variant="outlined"
+            />
+            <v-alert
+              class="mt-3"
+              color="info"
+              density="compact"
+              icon="mdi-information"
+              variant="tonal"
+            >
+              O patologista receberá um e-mail com o link para acessar esta discussão.
+            </v-alert>
+          </div>
+
+          <!-- Role selection (for both modes) -->
+          <v-divider class="my-4" />
+          <div class="text-caption text-medium-emphasis mb-2">Permissão</div>
+          <v-radio-group v-model="inviteRole" class="mt-0" hide-details inline>
+            <v-radio label="Colaborador (pode comentar)" value="invited" />
+            <v-radio label="Co-proprietário" value="owner" />
+          </v-radio-group>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="inviteDialog = false">
+            Cancelar
+          </v-btn>
+          <v-btn
+            color="primary"
+            :disabled="inviteMode === 'select' ? selectedPathologists.length === 0 : !inviteEmail.trim()"
+            :loading="inviteSending"
+            variant="flat"
+            @click="sendInvite"
+          >
+            <v-icon class="mr-1">{{ inviteMode === 'select' ? 'mdi-account-plus' : 'mdi-send' }}</v-icon>
+            {{ inviteMode === 'select' ? `Adicionar (${selectedPathologists.length})` : 'Enviar Convite' }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Case Search Dialog -->
+    <v-dialog v-model="caseSearchDialog" max-width="600" scrollable>
+      <v-card class="case-search-card">
+        <v-card-title class="d-flex align-center ga-2 pa-4">
+          <v-icon color="primary">mdi-magnify</v-icon>
+          Buscar Caso
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="caseSearchDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-divider />
+
+        <div class="pa-4">
+          <v-text-field
+            v-model="caseSearchQuery"
+            autofocus
+            class="case-search-input"
+            clearable
+            density="comfortable"
+            hide-details
+            placeholder="Buscar por ID, paciente, órgão ou patologista..."
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined"
+          />
+
+          <!-- Filters -->
+          <div class="d-flex ga-2 mt-3 flex-wrap">
+            <v-chip
+              v-for="filter in caseFilters"
+              :key="filter.value"
+              :color="activeCaseFilter === filter.value ? 'primary' : 'default'"
+              size="small"
+              :variant="activeCaseFilter === filter.value ? 'flat' : 'outlined'"
+              @click="activeCaseFilter = filter.value"
+            >
+              {{ filter.label }}
+            </v-chip>
+          </div>
+        </div>
+
+        <v-divider />
+
+        <v-card-text class="pa-0 case-search-results">
+          <!-- Results -->
+          <v-list v-if="filteredCases.length > 0" class="py-0">
+            <v-list-item
+              v-for="caseItem in filteredCases"
+              :key="caseItem.id"
+              class="case-result-item"
+              @click="selectCase(caseItem)"
+            >
+              <template #prepend>
+                <v-avatar :color="getCaseStatusColor(caseItem.status)" size="40">
+                  <v-icon color="white" size="20">mdi-folder-open</v-icon>
+                </v-avatar>
+              </template>
+
+              <v-list-item-title class="font-weight-medium">
+                {{ caseItem.id }} - {{ caseItem.patientName }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="d-flex align-center ga-2 mt-1">
+                <span class="d-flex align-center ga-1">
+                  <v-icon size="12">mdi-human</v-icon>
+                  {{ caseItem.organ }}
+                </span>
+                <span class="text-medium-emphasis">•</span>
+                <span class="d-flex align-center ga-1">
+                  <v-icon size="12">mdi-image-multiple</v-icon>
+                  {{ caseItem.slidesCount }} lâminas
+                </span>
+                <span class="text-medium-emphasis">•</span>
+                <span class="d-flex align-center ga-1">
+                  <v-icon size="12">mdi-calendar</v-icon>
+                  {{ caseItem.date }}
+                </span>
+              </v-list-item-subtitle>
+
+              <template #append>
+                <div class="d-flex flex-column align-end ga-1">
+                  <v-chip
+                    :color="getCaseStatusColor(caseItem.status)"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ getCaseStatusLabel(caseItem.status) }}
+                  </v-chip>
+                  <span class="text-caption text-medium-emphasis">{{ caseItem.assignedTo }}</span>
+                </div>
+              </template>
+            </v-list-item>
+          </v-list>
+
+          <!-- Empty State -->
+          <div v-else class="empty-search-state">
+            <v-icon color="medium-emphasis" size="48">mdi-folder-search-outline</v-icon>
+            <p class="text-body-2 text-medium-emphasis mt-2">
+              {{ caseSearchQuery ? 'Nenhum caso encontrado' : 'Digite para buscar casos' }}
+            </p>
+          </div>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-3">
+          <span class="text-caption text-medium-emphasis">
+            {{ filteredCases.length }} caso(s) encontrado(s)
+          </span>
+          <v-spacer />
+          <v-btn variant="text" @click="caseSearchDialog = false">Fechar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Trash Confirmation Dialog -->
+    <v-dialog v-model="showTrashConfirm" max-width="400">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="warning">mdi-trash-can-outline</v-icon>
+          Mover para Lixeira
+        </v-card-title>
+        <v-card-text>
+          Tem certeza que deseja mover este caso para a lixeira? Você poderá restaurá-lo posteriormente.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showTrashConfirm = false">Cancelar</v-btn>
+          <v-btn color="warning" variant="tonal" @click="confirmMoveToTrash">Mover para Lixeira</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <v-dialog v-model="showDeleteConfirm" max-width="400">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="error">mdi-delete-forever</v-icon>
+          Excluir Permanentemente
+        </v-card-title>
+        <v-card-text>
+          <strong>Atenção:</strong> Esta ação não pode ser desfeita. O caso e todos os seus dados serão excluídos permanentemente.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showDeleteConfirm = false">Cancelar</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDeleteCase">Excluir</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-app>
+</template>
+
+<script setup lang="ts">
+  import type { MeasurementResult, ROI } from '@/composables/useViewer'
+  import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
+  import { useDisplay, useTheme } from 'vuetify'
+  import { useViewer } from '@/composables/useViewer'
+
+  const router = useRouter()
+  const route = useRoute()
+
+  function goToDashboard () {
+    router.push('/dashboard')
+  }
+
+  // Viewer Controls (global state)
+  const viewerControls = useViewer()
+
+  // Theme
+  const theme = useTheme()
+  const isDark = computed(() => theme.global.name.value === 'medicalDark')
+
+  // Responsive
+  const { mobile } = useDisplay()
+
+  // State Management
+  const rightPanel = ref(!mobile.value) // Closed by default on mobile
+  const focusMode = ref(false) // Ultra-minimal focus mode
+  const activeTab = ref('annotations')
+  const activeTool = ref('pan')
+
+  // Mobile-specific state
+  const mobilePanel = ref(false)
+  const mobileToolsMenu = ref(false)
+  const mobileNavTab = ref<string | null>(null)
+  const isFullscreen = ref(false)
+  const showToolbar = ref(true)
+
+  // ===========================================
+  // REPORT (LAUDO) STATE
+  // ===========================================
+  interface ReportForm {
+    microscopicDescription: string
+    diagnosis: string
+    conclusion: string
+    notes: string
+    requestAdditionalExams: boolean
+    additionalExamsDetails: string
+  }
+
+  const reportForm = ref<ReportForm>({
+    microscopicDescription: '',
+    diagnosis: '',
+    conclusion: '',
+    notes: '',
+    requestAdditionalExams: false,
+    additionalExamsDetails: '',
+  })
+
+  type ReportStatusType = 'novo' | 'em_analise' | 'concluido'
+  const reportStatus = ref<ReportStatusType>('novo')
+  const reportHasUnsavedChanges = ref(false)
+
+  // Watch for changes in reportForm when report is concluded
+  watch(reportForm, () => {
+    if (reportStatus.value === 'concluido') {
+      reportHasUnsavedChanges.value = true
+    }
+  }, { deep: true })
+
+  const reportStatusLabel = computed(() => {
+    switch (reportStatus.value) {
+      case 'novo': { return 'Novo'
+      }
+      case 'em_analise': { return 'Em Análise'
+      }
+      case 'concluido': { return 'Concluído'
+      }
+      default: { return 'Novo'
+      }
+    }
+  })
+
+  const reportStatusColor = computed(() => {
+    switch (reportStatus.value) {
+      case 'novo': { return 'warning'
+      }
+      case 'em_analise': { return 'info'
+      }
+      case 'concluido': { return 'success'
+      }
+      default: { return 'warning'
+      }
+    }
+  })
+
+  const canConcludeReport = computed(() => {
+    return reportForm.value.microscopicDescription.trim().length > 0 && reportForm.value.diagnosis.trim().length > 0
+  })
+
+  function setReportStatus (status: ReportStatusType) {
+    reportStatus.value = status
+    console.log(`[Report] Status changed to ${status}`)
+  }
+
+  function concludeReport () {
+    if (!canConcludeReport.value) return
+    setReportStatus('concluido')
+    reportHasUnsavedChanges.value = false
+    console.log('[Report] Report concluded')
+  }
+
+  function updateReport () {
+    reportHasUnsavedChanges.value = false
+    console.log('[Report] Report updated:', reportForm.value)
+    // TODO: Save to backend
+  }
+
+  const aiSuggestion = ref({
+    microscopicDescription: 'Fragmento de pele exibindo epiderme com acantose irregular, alongamento e fusão de cones epiteliais. Na derme papilar e reticular superior, observa-se proliferação melanocítica atípica com padrão pagetoide, núcleos hipercromáticos e pleomórficos.',
+    diagnosis: 'Melanoma maligno extensivo superficial, nível de Clark III, espessura de Breslow 0,8mm. Índice mitótico: 2/mm². Sem ulceração. Sem invasão angiolinfática.',
+    conclusion: 'Achados morfológicos compatíveis com melanoma maligno extensivo superficial em fase de crescimento radial com microinvasão. Margens cirúrgicas livres de neoplasia. Recomenda-se estadiamento clínico completo e discussão em equipe multidisciplinar.',
+  })
+
+  const canSubmitReport = computed(() => {
+    return reportForm.value.diagnosis.trim().length > 0
+      && reportForm.value.conclusion.trim().length > 0
+  })
+
+  function applyAiSuggestion () {
+    if (aiSuggestion.value) {
+      reportForm.value.microscopicDescription = aiSuggestion.value.microscopicDescription
+      reportForm.value.diagnosis = aiSuggestion.value.diagnosis
+      reportForm.value.conclusion = aiSuggestion.value.conclusion
+    }
+  }
+
+  function saveDraft () {
+    if (reportStatus.value === 'novo') {
+      reportStatus.value = 'em_analise'
+    }
+    console.log('[Report] Draft saved:', reportForm.value)
+    // TODO: Save to backend
+  }
+
+  function submitReportForReview () {
+    if (!canSubmitReport.value) return
+    reportStatus.value = 'em_analise'
+    console.log('[Report] Submitted for review:', reportForm.value)
+    // TODO: Submit to backend and navigate back to dashboard
+  }
+
+  function exportReportPdf () {
+    const content = `
+LAUDO ANATOMOPATOLÓGICO
+========================
+Caso: ${viewerControls.state.value.caseName || 'N/A'}
+Data: ${new Date().toLocaleDateString('pt-BR')}
+
+DESCRIÇÃO MICROSCÓPICA
+${reportForm.value.microscopicDescription || 'Não informado'}
+
+DIAGNÓSTICO
+${reportForm.value.diagnosis || 'Não informado'}
+
+CONCLUSÃO
+${reportForm.value.conclusion || 'Não informado'}
+
+OBSERVAÇÕES
+${reportForm.value.notes || 'Nenhuma'}
+
+${reportForm.value.requestAdditionalExams ? `EXAMES COMPLEMENTARES SOLICITADOS\n${reportForm.value.additionalExamsDetails}` : ''}
+
+---
+SuperNavi - Plataforma de Patologia Digital
+    `.trim()
+
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `laudo-${viewerControls.state.value.caseName || 'caso'}-${new Date().toISOString().split('T')[0]}.txt`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    console.log('[Report] Exported as PDF (simulated as TXT)')
+  }
+
+  function exportReportDoc () {
+    const content = `
+LAUDO ANATOMOPATOLÓGICO
+
+Caso: ${viewerControls.state.value.caseName || 'N/A'}
+Data: ${new Date().toLocaleDateString('pt-BR')}
+
+DESCRIÇÃO MICROSCÓPICA
+${reportForm.value.microscopicDescription || 'Não informado'}
+
+DIAGNÓSTICO
+${reportForm.value.diagnosis || 'Não informado'}
+
+CONCLUSÃO
+${reportForm.value.conclusion || 'Não informado'}
+
+OBSERVAÇÕES
+${reportForm.value.notes || 'Nenhuma'}
+
+${reportForm.value.requestAdditionalExams ? `EXAMES COMPLEMENTARES SOLICITADOS\n${reportForm.value.additionalExamsDetails}` : ''}
+
+---
+SuperNavi - Plataforma de Patologia Digital
+    `.trim()
+
+    const blob = new Blob([content], { type: 'application/msword' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `laudo-${viewerControls.state.value.caseName || 'caso'}-${new Date().toISOString().split('T')[0]}.doc`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    console.log('[Report] Exported as DOC')
+  }
+
+  function printReport () {
+    const content = `
+      <html>
+      <head>
+        <title>Laudo - ${viewerControls.state.value.caseName || 'Caso'}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          h1 { color: #2C5F8D; border-bottom: 2px solid #2C5F8D; padding-bottom: 10px; }
+          h2 { color: #4A90A4; margin-top: 24px; }
+          p { line-height: 1.6; }
+          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <h1>LAUDO ANATOMOPATOLÓGICO</h1>
+        <p><strong>Caso:</strong> ${viewerControls.state.value.caseName || 'N/A'}</p>
+        <p><strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')}</p>
+
+        <h2>Descrição Microscópica</h2>
+        <p>${reportForm.value.microscopicDescription || 'Não informado'}</p>
+
+        <h2>Diagnóstico</h2>
+        <p>${reportForm.value.diagnosis || 'Não informado'}</p>
+
+        <h2>Conclusão</h2>
+        <p>${reportForm.value.conclusion || 'Não informado'}</p>
+
+        <h2>Observações</h2>
+        <p>${reportForm.value.notes || 'Nenhuma'}</p>
+
+        ${reportForm.value.requestAdditionalExams ? `<h2>Exames Complementares Solicitados</h2><p>${reportForm.value.additionalExamsDetails}</p>` : ''}
+
+        <div class="footer">
+          SuperNavi - Plataforma de Patologia Digital
+        </div>
+      </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(content)
+      printWindow.document.close()
+      printWindow.print()
+    }
+    console.log('[Report] Print dialog opened')
+  }
+
+  // Case Slides - Using shared state from composable
+  // The page sets slides via viewerControls.setSlides() after loading from API
+  const caseSlides = computed(() => viewerControls.state.value.slides)
+  const activeSlideId = computed(() => viewerControls.state.value.activeSlideId)
+
+  // Get slide index (1-based) for display
+  function getSlideIndex (slideId: string): number {
+    const index = caseSlides.value.findIndex(s => s.id === slideId)
+    return index === -1 ? 0 : index + 1
+  }
+
+  // Get slide label like "Lâmina 1"
+  function getSlideLabel (slideId: string): string {
+    const index = getSlideIndex(slideId)
+    return index > 0 ? `Lâmina ${index}` : ''
+  }
+
+  const currentSlideIndex = computed(() => getSlideIndex(activeSlideId.value))
+
+  const currentSlideLabel = computed(() => {
+    return currentSlideIndex.value > 0 ? `Lâmina ${currentSlideIndex.value}` : 'Nenhuma lâmina'
+  })
+
+  const currentSlideName = computed(() => {
+    const slide = caseSlides.value.find(s => s.id === activeSlideId.value)
+    if (!slide) return 'Nenhuma lâmina'
+    const label = currentSlideLabel.value
+    return `${label} · ${slide.stain}`
+  })
+
+  function selectSlide (slide: { id: string, name: string, stain: string, tileSource: string }) {
+    viewerControls.setActiveSlideId(slide.id)
+    // Update slide info in viewer
+    viewerControls.setSlideInfo(
+      viewerControls.state.value.caseName,
+      slide.name,
+    )
+    console.log('[Layout] Selected slide:', slide.name)
+    // The page will handle loading the new tile source via onSlideChange callback
+  }
+
+  // Delete confirmation dialog
+  const deleteDialog = ref(false)
+  const roiToDelete = ref<number | null>(null)
+  const roiToDeleteName = ref('')
+
+  // Case Management
+  type CaseLocationType = 'inbox' | 'archived' | 'trash'
+  const caseLocation = ref<CaseLocationType>('inbox')
+  const showTrashConfirm = ref(false)
+  const showDeleteConfirm = ref(false)
+
+  const caseLocationLabel = computed(() => {
+    switch (caseLocation.value) {
+      case 'inbox': { return 'Caixa de Entrada'
+      }
+      case 'archived': { return 'Arquivado'
+      }
+      case 'trash': { return 'Na Lixeira'
+      }
+      default: { return 'Desconhecido'
+      }
+    }
+  })
+
+  const caseLocationColor = computed(() => {
+    switch (caseLocation.value) {
+      case 'inbox': { return 'primary'
+      }
+      case 'archived': { return 'secondary'
+      }
+      case 'trash': { return 'error'
+      }
+      default: { return 'default'
+      }
+    }
+  })
+
+  const caseLocationIcon = computed(() => {
+    switch (caseLocation.value) {
+      case 'inbox': { return 'mdi-inbox'
+      }
+      case 'archived': { return 'mdi-archive'
+      }
+      case 'trash': { return 'mdi-trash-can'
+      }
+      default: { return 'mdi-help'
+      }
+    }
+  })
+
+  function moveCaseTo (location: CaseLocationType) {
+    caseLocation.value = location
+    console.log(`[Case] Moved to ${location}`)
+    // TODO: Update in backend
+  }
+
+  function confirmMoveToTrash () {
+    moveCaseTo('trash')
+    showTrashConfirm.value = false
+  }
+
+  function confirmDeleteCase () {
+    console.log('[Case] Permanently deleted')
+    showDeleteConfirm.value = false
+    // TODO: Delete from backend and navigate to dashboard
+    router.push('/dashboard')
+  }
+
+  // Invite pathologist dialog
+  const inviteDialog = ref(false)
+  const inviteMode = ref<'select' | 'email'>('select')
+  const inviteEmail = ref('')
+  const inviteRole = ref<'invited' | 'owner'>('invited')
+  const inviteSending = ref(false)
+  const selectedPathologists = ref<string[]>([])
+
+  // Available pathologists (mock data - would come from API)
+  const availablePathologists = ref([
+    { id: 'path-1', name: 'Dr. Ricardo Mendes', specialty: 'Dermatopatologia', avatar: '', isOnline: true },
+    { id: 'path-2', name: 'Dra. Fernanda Lima', specialty: 'Citopatologia', avatar: '', isOnline: true },
+    { id: 'path-3', name: 'Dr. Carlos Eduardo', specialty: 'Patologia Cirúrgica', avatar: '', isOnline: false },
+    { id: 'path-4', name: 'Dra. Beatriz Santos', specialty: 'Neuropatologia', avatar: '', isOnline: false },
+    { id: 'path-5', name: 'Dr. André Costa', specialty: 'Hematopatologia', avatar: '', isOnline: true },
+  ])
+
+  // Right Panel Resizing
+  const MIN_PANEL_WIDTH = 400
+  const MAX_PANEL_WIDTH = 800
+  const rightPanelWidth = ref(MIN_PANEL_WIDTH)
+  const isResizingPanel = ref(false)
+
+  function startPanelResize (e: MouseEvent) {
+    if (mobile.value) return
+    e.preventDefault()
+    isResizingPanel.value = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onPanelResize)
+    document.addEventListener('mouseup', stopPanelResize)
+  }
+
+  function onPanelResize (e: MouseEvent) {
+    if (!isResizingPanel.value) return
+    const newWidth = window.innerWidth - e.clientX
+    rightPanelWidth.value = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, newWidth))
+  }
+
+  function stopPanelResize () {
+    isResizingPanel.value = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    document.removeEventListener('mousemove', onPanelResize)
+    document.removeEventListener('mouseup', stopPanelResize)
+  }
+
+  // ===========================================
+  // CASE SEARCH
+  // ===========================================
+  interface CaseItem {
+    id: string
+    patientName: string
+    organ: string
+    slidesCount: number
+    date: string
+    status: 'pending' | 'in-progress' | 'completed' | 'urgent'
+    assignedTo: string
+  }
+
+  const caseSearchDialog = ref(false)
+  const caseSearchQuery = ref('')
+  const activeCaseFilter = ref('all')
+
+  const caseFilters = [
+    { value: 'all', label: 'Todos' },
+    { value: 'pending', label: 'Pendentes' },
+    { value: 'in-progress', label: 'Em Análise' },
+    { value: 'urgent', label: 'Urgentes' },
+    { value: 'completed', label: 'Finalizados' },
+  ]
+
+  const allCases = ref<CaseItem[]>([
+    { id: 'CASO-2026-001', patientName: 'Maria Silva', organ: 'Fígado', slidesCount: 4, date: '02/01/2026', status: 'in-progress', assignedTo: 'Dr. Carlos Silva' },
+    { id: 'CASO-2026-002', patientName: 'João Santos', organ: 'Pulmão', slidesCount: 6, date: '02/01/2026', status: 'urgent', assignedTo: 'Dra. Ana Costa' },
+    { id: 'CASO-2026-003', patientName: 'Ana Oliveira', organ: 'Mama', slidesCount: 3, date: '01/01/2026', status: 'pending', assignedTo: 'Dr. Carlos Silva' },
+    { id: 'CASO-2025-498', patientName: 'Pedro Costa', organ: 'Próstata', slidesCount: 8, date: '30/12/2025', status: 'completed', assignedTo: 'Dr. Roberto Mendes' },
+    { id: 'CASO-2025-497', patientName: 'Lucia Ferreira', organ: 'Tireoide', slidesCount: 2, date: '29/12/2025', status: 'completed', assignedTo: 'Dra. Ana Costa' },
+    { id: 'CASO-2025-496', patientName: 'Carlos Mendes', organ: 'Rim', slidesCount: 5, date: '28/12/2025', status: 'pending', assignedTo: 'Dr. Carlos Silva' },
+    { id: 'CASO-2025-495', patientName: 'Fernanda Lima', organ: 'Pele', slidesCount: 3, date: '27/12/2025', status: 'in-progress', assignedTo: 'Dr. Roberto Mendes' },
+    { id: 'CASO-2025-494', patientName: 'Ricardo Alves', organ: 'Cólon', slidesCount: 7, date: '26/12/2025', status: 'urgent', assignedTo: 'Dra. Ana Costa' },
+  ])
+
+  const filteredCases = computed(() => {
+    let result = allCases.value
+
+    // Filter by status
+    if (activeCaseFilter.value !== 'all') {
+      result = result.filter(c => c.status === activeCaseFilter.value)
+    }
+
+    // Filter by search query
+    if (caseSearchQuery.value) {
+      const query = caseSearchQuery.value.toLowerCase()
+      result = result.filter(c =>
+        c.id.toLowerCase().includes(query)
+        || c.patientName.toLowerCase().includes(query)
+        || c.organ.toLowerCase().includes(query)
+        || c.assignedTo.toLowerCase().includes(query),
+      )
+    }
+
+    return result
+  })
+
+  function openCaseSearch () {
+    caseSearchQuery.value = ''
+    activeCaseFilter.value = 'all'
+    caseSearchDialog.value = true
+  }
+
+  function selectCase (caseItem: CaseItem) {
+    console.log('[Layout] Selected case:', caseItem.id)
+    viewerControls.setSlideInfo(caseItem.id, `Lâmina 001 · ${caseItem.organ}`)
+    caseSearchDialog.value = false
+  }
+
+  function getCaseStatusColor (status: string): string {
+    const colors: Record<string, string> = {
+      'pending': 'info',
+      'in-progress': 'primary',
+      'completed': 'success',
+      'urgent': 'error',
+    }
+    return colors[status] || 'grey'
+  }
+
+  function getCaseStatusLabel (status: string): string {
+    const labels: Record<string, string> = {
+      'pending': 'Pendente',
+      'in-progress': 'Em Análise',
+      'completed': 'Finalizado',
+      'urgent': 'Urgente',
+    }
+    return labels[status] || status
+  }
+
+  // ===========================================
+  // ANNOTATIONS & DISCUSSION SYSTEM
+  // ===========================================
+
+  // Types
+  interface Participant {
+    id: string
+    name: string
+    role: 'owner' | 'invited' | 'ai'
+    avatar?: string
+    specialty?: string
+    isOnline?: boolean
+  }
+
+  interface Message {
+    id: string
+    authorId: string
+    content: string
+    timestamp: Date
+    type: 'text' | 'ai-analysis' | 'ai-suggestion' | 'system'
+    aiConfidence?: number
+    aiFindings?: Array<{ label: string, value: string, severity?: 'low' | 'medium' | 'high' }>
+  }
+
+  interface Annotation {
+    id: number
+    name: string
+    type: 'rectangle' | 'arrow' | 'freehand'
+    color: string
+    coordinates: { x: number, y: number, width?: number, height?: number }
+    owner: Participant
+    participants: Participant[]
+    messages: Message[]
+    createdAt: Date
+    updatedAt: Date
+    status: 'open' | 'resolved' | 'pending-review'
+    priority: 'low' | 'normal' | 'high' | 'urgent'
+    unreadCount: number
+  }
+
+  // AI Pathologist Agent
+  const aiAgent: Participant = {
+    id: 'ai-pathologist',
+    name: 'PathAI Assistant',
+    role: 'ai',
+    specialty: 'Histopatologia Geral',
+    isOnline: true,
+  }
+
+  // Current User (will come from auth later)
+  const currentUser: Participant = {
+    id: 'user-1',
+    name: 'Dr. Carlos Silva',
+    role: 'owner',
+    specialty: 'Hepatopatologia',
+    isOnline: true,
+  }
+
+  // Sample Participants
+  const sampleParticipants: Participant[] = [
+    currentUser,
+    {
+      id: 'user-2',
+      name: 'Dra. Ana Costa',
+      role: 'invited',
+      specialty: 'Oncopatologia',
+      isOnline: true,
+    },
+    {
+      id: 'user-3',
+      name: 'Dr. Roberto Mendes',
+      role: 'invited',
+      specialty: 'Citopatologia',
+      isOnline: false,
+    },
+    aiAgent,
+  ]
+
+  // Annotations State - loaded from API
+  const annotations = ref<Annotation[]>([])
+
+  // Total unread messages (for mobile badge)
+  const totalUnread = computed(() => annotations.value.reduce((acc, a) => acc + a.unreadCount, 0))
+
+  // Selected annotation for discussion view
+  const selectedAnnotation = ref<Annotation | null>(null)
+
+  // New message input
+  const newMessage = ref('')
+  const isSendingMessage = ref(false)
+  const aiAgentEnabled = ref(true) // Toggle for AI participation in annotation discussions
+
+  // ===========================================
+  // AI CASE DISCUSSION (Global Slide Analysis)
+  // ===========================================
+  const aiCaseMessages = ref<Message[]>([])
+  const aiCaseNewMessage = ref('')
+  const isAICaseTyping = ref(false)
+
+  function startAICaseAnalysis () {
+    isAICaseTyping.value = true
+
+    // Simulate AI initial analysis
+    setTimeout(() => {
+      const initialAnalysis: Message = {
+        id: `ai-case-${Date.now()}`,
+        authorId: 'ai-pathologist',
+        content: 'Análise inicial da lâmina concluída. Identifiquei os seguintes achados principais:',
+        timestamp: new Date(),
+        type: 'ai-analysis',
+        aiConfidence: 89,
+        aiFindings: [
+          { label: 'Padrão arquitetural', value: 'Parênquima hepático com arquitetura lobular preservada' },
+          { label: 'Alterações portais', value: 'Infiltrado inflamatório linfocitário moderado em espaços-porta', severity: 'medium' },
+          { label: 'Parênquima', value: 'Hepatócitos com discreta balonização centrolobular' },
+          { label: 'Fibrose', value: 'Fibrose portal e septal incipiente (F1-F2)', severity: 'medium' },
+          { label: 'Sugestão diagnóstica', value: 'Hepatite crônica com atividade leve a moderada', severity: 'high' },
+        ],
+      }
+      aiCaseMessages.value.push(initialAnalysis)
+      isAICaseTyping.value = false
+    }, 2000)
+  }
+
+  async function sendAICaseMessage () {
+    if (!aiCaseNewMessage.value.trim() || isAICaseTyping.value) return
+
+    // Add user message
+    const userMessage: Message = {
+      id: `user-case-${Date.now()}`,
+      authorId: currentUser.id,
+      content: aiCaseNewMessage.value.trim(),
+      timestamp: new Date(),
+      type: 'text',
+    }
+    aiCaseMessages.value.push(userMessage)
+    aiCaseNewMessage.value = ''
+    isAICaseTyping.value = true
+
+    // Simulate AI response
+    setTimeout(() => {
+      const aiResponse: Message = {
+        id: `ai-case-${Date.now()}`,
+        authorId: 'ai-pathologist',
+        content: 'Analisando sua pergunta em contexto com os achados da lâmina...',
+        timestamp: new Date(),
+        type: 'ai-suggestion',
+        aiConfidence: 85,
+        aiFindings: [
+          { label: 'Observação', value: 'Sua pergunta foi correlacionada com os achados morfológicos identificados' },
+          { label: 'Recomendação', value: 'Considere avaliar as regiões de interesse já marcadas para detalhes específicos' },
+        ],
+      }
+      aiCaseMessages.value.push(aiResponse)
+      isAICaseTyping.value = false
+    }, 1500)
+  }
+
+  // Annotation name editing
+  const isEditingAnnotationName = ref(false)
+  const editingAnnotationName = ref('')
+
+  function startEditAnnotationName () {
+    if (selectedAnnotation.value) {
+      editingAnnotationName.value = selectedAnnotation.value.name
+      isEditingAnnotationName.value = true
+    }
+  }
+
+  function saveAnnotationName () {
+    if (selectedAnnotation.value && editingAnnotationName.value.trim()) {
+      selectedAnnotation.value.name = editingAnnotationName.value.trim()
+      // Also update in the annotations array
+      const annotation = annotations.value.find(a => a.id === selectedAnnotation.value?.id)
+      if (annotation) {
+        annotation.name = editingAnnotationName.value.trim()
+      }
+      // Sync to viewer to update ROI label on image
+      syncAnnotationsToViewer()
+    }
+    isEditingAnnotationName.value = false
+  }
+
+  function cancelEditAnnotationName () {
+    isEditingAnnotationName.value = false
+  }
+
+  // Discussion actions
+  function selectAnnotation (annotation: Annotation) {
+    selectedAnnotation.value = annotation
+    // Reset unread count
+    annotation.unreadCount = 0
+    // Focus on viewer
+    focusAnnotation(annotation.id)
+    // Open mobile panel if on mobile
+    if (mobile.value) {
+      mobilePanel.value = true
+    }
+  }
+
+  function closeDiscussion () {
+    selectedAnnotation.value = null
+    // Reset zoom to 1x when closing discussion
+    viewerControls.resetView()
+  }
+
+  async function sendMessage () {
+    if (!newMessage.value.trim() || !selectedAnnotation.value || isSendingMessage.value) return
+
+    const message: Message = {
+      id: `msg-${Date.now()}`,
+      authorId: currentUser.id,
+      content: newMessage.value.trim(),
+      timestamp: new Date(),
+      type: 'text',
+    }
+
+    selectedAnnotation.value.messages.push(message)
+    selectedAnnotation.value.updatedAt = new Date()
+    newMessage.value = ''
+
+    // Only trigger AI response if AI agent is enabled
+    if (aiAgentEnabled.value) {
+      isSendingMessage.value = true
+
+      // Simulate AI response after user message
+      setTimeout(() => {
+        if (selectedAnnotation.value) {
+          // Generate contextual AI response based on user message
+          const userMsg = message.content.toLowerCase()
+          let aiContent = ''
+          let aiFindings: Array<{ label: string, value: string, severity?: 'high' | 'medium' | 'low' }> = []
+          let aiConfidence = 88
+
+          if (userMsg.includes('melanoma') || userMsg.includes('maligno') || userMsg.includes('tumor')) {
+            aiContent = 'Concordo com sua observação sobre características atípicas. A presença de assimetria celular e padrão de crescimento irregular são indicativos relevantes. Recomendo análise imunohistoquímica complementar para confirmação diagnóstica.'
+            aiFindings = [
+              { label: 'Padrão identificado', value: 'Proliferação melanocítica atípica', severity: 'high' },
+              { label: 'Correlação', value: 'Achados consistentes com sua observação' },
+              { label: 'Sugestão', value: 'Solicitar marcadores S-100 e HMB-45' },
+            ]
+            aiConfidence = 94
+          } else if (userMsg.includes('inflamação') || userMsg.includes('infiltrado') || userMsg.includes('inflamatório')) {
+            aiContent = 'Sua observação sobre o componente inflamatório é pertinente. O padrão do infiltrado sugere processo reativo. Avaliar correlação clínica para determinar etiologia.'
+            aiFindings = [
+              { label: 'Tipo de infiltrado', value: 'Predominantemente linfocítico' },
+              { label: 'Distribuição', value: 'Perivascular e intersticial' },
+              { label: 'Recomendação', value: 'Correlacionar com história clínica' },
+            ]
+            aiConfidence = 86
+          } else if (userMsg.includes('normal') || userMsg.includes('benigno') || userMsg.includes('sem alterações')) {
+            aiContent = 'Concordo com sua avaliação. Os achados morfológicos são compatíveis com tecido dentro dos limites da normalidade para este tipo de amostra.'
+            aiFindings = [
+              { label: 'Avaliação', value: 'Sem atipias significativas' },
+              { label: 'Arquitetura', value: 'Preservada' },
+            ]
+            aiConfidence = 92
+          } else {
+            aiContent = `Obrigado pela sua observação sobre "${message.content.slice(0, 50)}${message.content.length > 50 ? '...' : ''}". Analisei a região marcada e identifiquei características relevantes que podem auxiliar no diagnóstico diferencial.`
+            aiFindings = [
+              { label: 'Análise', value: 'Observação registrada e correlacionada com achados anteriores' },
+              { label: 'Sugestão', value: 'Considere marcar outras áreas de interesse para comparação' },
+            ]
+            aiConfidence = 85
+          }
+
+          const aiResponse: Message = {
+            id: `msg-${Date.now()}`,
+            authorId: 'ai-pathologist',
+            content: aiContent,
+            timestamp: new Date(),
+            type: 'ai-suggestion',
+            aiConfidence,
+            aiFindings,
+          }
+          selectedAnnotation.value.messages.push(aiResponse)
+        }
+        isSendingMessage.value = false
+      }, 2000)
+    }
+  }
+
+  function getParticipant (id: string): Participant | undefined {
+    if (id === 'ai-pathologist') return aiAgent
+    if (id === currentUser.id) return currentUser
+    return sampleParticipants.find(p => p.id === id)
+  }
+
+  function formatTime (date: Date): string {
+    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date)
+  }
+
+  function formatDate (date: Date): string {
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    if (date.toDateString() === today.toDateString()) return 'Hoje'
+    if (date.toDateString() === yesterday.toDateString()) return 'Ontem'
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(date)
+  }
+
+  function getPriorityColor (priority: string): string {
+    const colors: Record<string, string> = {
+      low: 'success',
+      normal: 'info',
+      high: 'warning',
+      urgent: 'error',
+    }
+    return colors[priority] || 'grey'
+  }
+
+  function getStatusLabel (status: string): string {
+    const labels: Record<string, string> = {
+      'open': 'Em discussão',
+      'resolved': 'Resolvido',
+      'pending-review': 'Aguardando revisão',
+    }
+    return labels[status] || status
+  }
+
+  function getLastMessage (annotation: Annotation): Message | undefined {
+    const len = annotation.messages.length
+    return len > 0 ? annotation.messages[len - 1] : undefined
+  }
+
+  // Details State
+  const slideDetails = ref([
+    { label: 'Case ID', value: '12345' },
+    { label: 'Patient ID', value: 'PT-2024-00892' },
+    { label: 'Stain', value: 'H&E (Hematoxylin & Eosin)' },
+    { label: 'Organ', value: 'Liver' },
+    { label: 'Magnification', value: '40x' },
+    { label: 'Scanner', value: 'Aperio AT2' },
+    { label: 'Scan Date', value: '2026-01-01 10:30 AM' },
+    { label: 'Resolution', value: '0.25 µm/pixel' },
+    { label: 'Dimensions', value: '120,000 x 80,000 px' },
+    { label: 'File Size', value: '2.4 GB' },
+  ])
+
+  // Toolbar Auto-hide
+  let toolbarTimeout: ReturnType<typeof setTimeout> | null = null
+
+  function onMouseMove () {
+    if (isFullscreen.value) {
+      showToolbar.value = true
+      if (toolbarTimeout) clearTimeout(toolbarTimeout)
+      toolbarTimeout = setTimeout(() => {
+        showToolbar.value = false
+      }, 3000)
+    }
+  }
+
+  function onMouseLeave () {
+    if (toolbarTimeout) clearTimeout(toolbarTimeout)
+  }
+
+  // Annotation Actions
+  function focusAnnotation (id: number) {
+    console.log('Focus annotation:', id)
+    // Zoom to the annotation on the viewer
+    viewerControls.goToROI(id)
+  }
+
+  // Convert annotations to ROIs for the viewer
+  function syncAnnotationsToViewer () {
+    const rois: ROI[] = annotations.value.map(ann => ({
+      id: ann.id,
+      name: ann.name,
+      color: ann.color,
+      type: ann.type === 'arrow' ? 'arrow' : 'rectangle',
+      coordinates: {
+        x: ann.coordinates.x,
+        y: ann.coordinates.y,
+        width: ann.coordinates.width || 400,
+        height: ann.coordinates.height || 300,
+      },
+      isSelected: ann.id === selectedAnnotation.value?.id,
+    }))
+    viewerControls.setROIs(rois)
+  }
+
+  // Handle ROI click from viewer (opens discussion)
+  function handleViewerROIClick (roiId: number) {
+    console.log('[Layout] handleViewerROIClick:', roiId)
+    const annotation = annotations.value.find(a => a.id === roiId)
+    console.log('[Layout] Found annotation:', annotation)
+    if (annotation) {
+      selectAnnotation(annotation)
+      // Ensure we're on the annotations tab
+      activeTab.value = 'annotations'
+      // Open the right panel if closed
+      if (!rightPanel.value) {
+        rightPanel.value = true
+      }
+    }
+  }
+
+  // Handle ROI delete from viewer - show confirmation dialog
+  function handleViewerROIDelete (roiId: number) {
+    console.log('[Layout] handleViewerROIDelete:', roiId)
+    const annotation = annotations.value.find(a => a.id === roiId)
+    if (annotation) {
+      roiToDelete.value = roiId
+      roiToDeleteName.value = annotation.name
+      deleteDialog.value = true
+    }
+  }
+
+  // Confirm ROI deletion
+  function confirmDeleteROI () {
+    if (roiToDelete.value !== null) {
+      const annotationIndex = annotations.value.findIndex(a => a.id === roiToDelete.value)
+      if (annotationIndex !== -1) {
+        // Remove annotation from list
+        annotations.value.splice(annotationIndex, 1)
+        // If this was the selected annotation, clear selection
+        if (selectedAnnotation.value?.id === roiToDelete.value) {
+          selectedAnnotation.value = null
+        }
+        // Sync to viewer
+        syncAnnotationsToViewer()
+      }
+    }
+    cancelDeleteROI()
+  }
+
+  // Cancel ROI deletion
+  function cancelDeleteROI () {
+    deleteDialog.value = false
+    roiToDelete.value = null
+    roiToDeleteName.value = ''
+  }
+
+  // Toggle annotation resolved status
+  function toggleAnnotationResolved () {
+    if (!selectedAnnotation.value) return
+
+    const newStatus = selectedAnnotation.value.status === 'resolved' ? 'open' : 'resolved'
+    selectedAnnotation.value.status = newStatus
+
+    // Add system message
+    const statusMessage: Message = {
+      id: `msg-${Date.now()}`,
+      authorId: currentUser.id,
+      content: newStatus === 'resolved'
+        ? `${currentUser.name} marcou esta discussão como resolvida`
+        : `${currentUser.name} reabriu esta discussão`,
+      timestamp: new Date(),
+      type: 'system',
+    }
+    selectedAnnotation.value.messages.push(statusMessage)
+    selectedAnnotation.value.updatedAt = new Date()
+  }
+
+  // Open invite pathologist dialog
+  function openInviteDialog () {
+    inviteMode.value = 'select'
+    inviteEmail.value = ''
+    inviteRole.value = 'invited'
+    selectedPathologists.value = []
+    inviteDialog.value = true
+  }
+
+  // Get pathologists not already in the discussion
+  const availableToInvite = computed(() => {
+    if (!selectedAnnotation.value) return availablePathologists.value
+    const currentIds = new Set(selectedAnnotation.value.participants.map(p => p.id))
+    return availablePathologists.value.filter(p => !currentIds.has(p.id))
+  })
+
+  // Send invite to pathologist(s)
+  async function sendInvite () {
+    if (!selectedAnnotation.value) return
+
+    // Validate based on mode
+    if (inviteMode.value === 'email' && !inviteEmail.value.trim()) return
+    if (inviteMode.value === 'select' && selectedPathologists.value.length === 0) return
+
+    inviteSending.value = true
+
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    if (inviteMode.value === 'select') {
+      // Add selected pathologists
+      for (const pathId of selectedPathologists.value) {
+        const pathologist = availablePathologists.value.find(p => p.id === pathId)
+        if (pathologist) {
+          const newParticipant: Participant = {
+            id: pathologist.id,
+            name: pathologist.name,
+            specialty: pathologist.specialty,
+            role: inviteRole.value,
+            isOnline: pathologist.isOnline,
+          }
+          selectedAnnotation.value.participants.push(newParticipant)
+
+          // Add system message for each
+          const inviteMessage: Message = {
+            id: `msg-${Date.now()}-${pathId}`,
+            authorId: currentUser.id,
+            content: `${currentUser.name} adicionou ${pathologist.name} à discussão`,
+            timestamp: new Date(),
+            type: 'system',
+          }
+          selectedAnnotation.value.messages.push(inviteMessage)
+        }
+      }
+    } else {
+      // Invite by email
+      const emailName = inviteEmail.value.split('@')[0] || 'Convidado'
+      const newParticipant: Participant = {
+        id: `user-${Date.now()}`,
+        name: emailName.charAt(0).toUpperCase() + emailName.slice(1),
+        role: inviteRole.value,
+        isOnline: false,
+      }
+      selectedAnnotation.value.participants.push(newParticipant)
+
+      const inviteMessage: Message = {
+        id: `msg-${Date.now()}`,
+        authorId: currentUser.id,
+        content: `${currentUser.name} convidou ${newParticipant.name} para a discussão`,
+        timestamp: new Date(),
+        type: 'system',
+      }
+      selectedAnnotation.value.messages.push(inviteMessage)
+    }
+
+    selectedAnnotation.value.updatedAt = new Date()
+    inviteSending.value = false
+    inviteDialog.value = false
+  }
+
+  // Delete current selected ROI
+  function deleteSelectedROI () {
+    if (!selectedAnnotation.value) return
+    roiToDelete.value = selectedAnnotation.value.id
+    roiToDeleteName.value = selectedAnnotation.value.name
+    deleteDialog.value = true
+  }
+
+  // Handle tool selection
+  function selectTool (tool: string) {
+    console.log('[Layout] selectTool:', tool)
+    activeTool.value = tool
+
+    // Set drawing mode based on tool
+    switch (tool) {
+      case 'roi-rect': {
+        console.log('[Layout] Setting drawing mode to rectangle')
+        viewerControls.setDrawingMode('rectangle')
+
+        break
+      }
+      case 'roi-arrow': {
+        console.log('[Layout] Setting drawing mode to arrow')
+        viewerControls.setDrawingMode('arrow')
+
+        break
+      }
+      case 'measure': {
+        console.log('[Layout] Setting drawing mode to measure')
+        viewerControls.setDrawingMode('measure')
+
+        break
+      }
+      default: {
+        viewerControls.setDrawingMode('none')
+      }
+    }
+    console.log('[Layout] Drawing state after:', viewerControls.drawingState.value)
+  }
+
+  // Color palette for new annotations
+  const annotationColors = [
+    '#E53935', // Red
+    '#FB8C00', // Orange
+    '#7B1FA2', // Purple
+    '#1E88E5', // Blue
+    '#43A047', // Green
+    '#00ACC1', // Cyan
+    '#F4511E', // Deep Orange
+    '#8E24AA', // Deep Purple
+  ]
+  let nextColorIndex = 0
+
+  function getNextColor (): string {
+    const color = annotationColors[nextColorIndex % annotationColors.length]!
+    nextColorIndex++
+    return color
+  }
+
+  // Handle drawing complete - create new annotation
+  function handleDrawingComplete (coordinates: { x: number, y: number, width: number, height: number }, type: 'rectangle' | 'arrow') {
+    console.log('[Layout] Drawing complete:', type, coordinates)
+
+    // Create new annotation
+    const newAnnotation: Annotation = {
+      id: Date.now(), // Use timestamp as unique ID
+      name: `ROI ${annotations.value.length + 1}`,
+      type: type,
+      color: getNextColor(),
+      coordinates: coordinates,
+      owner: currentUser,
+      participants: [currentUser, aiAgent],
+      messages: [],
+      status: 'open',
+      priority: 'normal',
+      unreadCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    // Add to annotations list
+    annotations.value.push(newAnnotation)
+
+    // Select the new annotation (opens discussion)
+    selectAnnotation(newAnnotation)
+
+    // Switch to annotations tab
+    activeTab.value = 'annotations'
+
+    // Open right panel if closed
+    if (!rightPanel.value) {
+      rightPanel.value = true
+    }
+
+    // Reset tool to pan mode
+    selectTool('pan')
+
+    console.log('[Layout] New annotation created:', newAnnotation)
+  }
+
+  // Watch annotations and sync to viewer
+  watch(
+    annotations,
+    () => syncAnnotationsToViewer(),
+    { deep: true, immediate: true },
+  )
+
+  // Watch selected annotation to update viewer selection
+  watch(
+    () => selectedAnnotation.value?.id,
+    newId => {
+      viewerControls.selectROI(newId ?? null)
+    },
+  )
+
+  // Theme Management
+  function toggleTheme () {
+    theme.global.name.value = isDark.value ? 'medicalLight' : 'medicalDark'
+  }
+
+  // Focus Mode Management
+  function toggleFocusMode () {
+    focusMode.value = !focusMode.value
+    // Hide panels in focus mode
+    rightPanel.value = focusMode.value ? false : !mobile.value
+  }
+
+  // Fullscreen Management
+  function toggleFullscreen () {
+    if (isFullscreen.value) {
+      document.exitFullscreen()
+    } else {
+      document.documentElement.requestFullscreen()
+    }
+  }
+
+  function handleFullscreenChange () {
+    isFullscreen.value = !!document.fullscreenElement
+  }
+
+  // Handle Escape key to exit focus mode
+  function handleKeyDown (event: KeyboardEvent) {
+    if (event.key === 'Escape' && focusMode.value) {
+      toggleFocusMode()
+    }
+  }
+
+  // Handle measurement complete - add to persistent measurements
+  function handleMeasurementComplete (result: Omit<MeasurementResult, 'id'>) {
+    console.log('[Layout] Measurement complete:', result)
+    viewerControls.addMeasurement(result)
+  }
+
+  onMounted(() => {
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('keydown', handleKeyDown)
+    // Register callback for when ROIs are clicked in the viewer
+    viewerControls.onROIClick(handleViewerROIClick)
+    // Register callback for when ROIs are deleted in the viewer
+    viewerControls.onROIDelete(handleViewerROIDelete)
+    // Register callback for when drawing is complete
+    viewerControls.onDrawingComplete(handleDrawingComplete)
+    // Register callback for when measurement is complete
+    viewerControls.onMeasurementComplete(handleMeasurementComplete)
+
+    // Check for roiId query parameter to auto-select annotation
+    const roiIdParam = route.query.roiId
+    if (roiIdParam) {
+      const roiId = Number(roiIdParam)
+      if (!isNaN(roiId)) {
+        // Small delay to ensure annotations are loaded
+        setTimeout(() => {
+          const annotation = annotations.value.find(a => a.id === roiId)
+          if (annotation) {
+            selectAnnotation(annotation)
+            activeTab.value = 'annotations'
+            if (!rightPanel.value) {
+              rightPanel.value = true
+            }
+          }
+        }, 100)
+      }
+    }
+  })
+
+  onUnmounted(() => {
+    document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    document.removeEventListener('keydown', handleKeyDown)
+    if (toolbarTimeout) clearTimeout(toolbarTimeout)
+  })
+</script>
+
+<style scoped lang="scss">
+/* ========================================
+   ULTRA-MINIMAL LAYOUT
+   Focus on pathology work
+   ======================================== */
+
+// Brand Styles
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.brand-name {
+  font-family: 'Manrope', system-ui, sans-serif;
+}
+
+.brand-super {
+  font-weight: 400;
+}
+
+.brand-navi {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+// Global text contrast fixes for both themes
+:deep(.v-app-bar),
+:deep(.v-navigation-drawer),
+:deep(.v-footer) {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+// Fix menu and list text colors
+:deep(.v-menu .v-list),
+:deep(.v-list) {
+  color: rgb(var(--v-theme-on-surface));
+
+  .v-list-item {
+    color: rgb(var(--v-theme-on-surface));
+  }
+
+  .v-list-item-title,
+  .v-list-item-subtitle {
+    color: rgb(var(--v-theme-on-surface)) !important;
+  }
+}
+
+// Fix button text colors
+:deep(.v-btn) {
+  &:not(.v-btn--variant-elevated):not(.v-btn--variant-flat) {
+    color: rgb(var(--v-theme-on-surface));
+  }
+}
+
+/* Mobile Header Bar */
+.mobile-header-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  background: rgba(var(--v-theme-surface), 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
+.back-btn-mobile {
+  color: rgb(var(--v-theme-primary)) !important;
+  flex-shrink: 0;
+}
+
+.mobile-case-selector {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover,
+  &:active {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+  }
+}
+
+.mobile-case-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.mobile-case-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-slide-name {
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Floating Case/Slide Selector (Centered) - Desktop Only */
+.floating-case-container {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  background: rgba(var(--v-theme-surface), 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 4px 6px;
+}
+
+.selector-divider {
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  align-self: center;
+  opacity: 0.15;
+}
+
+.case-selector,
+.slide-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+  }
+
+  .case-icon,
+  .slide-icon {
+    opacity: 0.6;
+  }
+
+  .case-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgb(var(--v-theme-on-surface));
+    white-space: nowrap;
+  }
+
+  .slide-name {
+    font-size: 13px;
+    font-weight: 400;
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 0.8;
+    white-space: nowrap;
+  }
+
+  .chevron-icon {
+    opacity: 0.4;
+    transition: all 0.2s ease;
+  }
+
+  &:hover .chevron-icon {
+    opacity: 0.7;
+  }
+}
+
+/* Case Actions Dropdown */
+.case-actions-dropdown {
+  background: rgba(var(--v-theme-surface), 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  min-width: 240px;
+  overflow: hidden;
+
+  .dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+  }
+
+  .dropdown-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+  }
+}
+
+.case-action-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+
+  span {
+    font-size: 14px;
+    color: rgb(var(--v-theme-on-surface));
+  }
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+  }
+
+  &--active {
+    background: rgba(var(--v-theme-primary), 0.06);
+
+    span {
+      font-weight: 500;
+    }
+  }
+
+  &--danger:hover {
+    background: rgba(var(--v-theme-error), 0.08);
+
+    span {
+      color: rgb(var(--v-theme-error));
+    }
+  }
+}
+
+/* Slides Dropdown */
+.slides-dropdown {
+  background: rgba(var(--v-theme-surface), 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  min-width: 220px;
+  overflow: hidden;
+
+  .dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+  }
+
+  .dropdown-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+  }
+}
+
+.slide-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+  }
+
+  &--active {
+    background: rgba(var(--v-theme-primary), 0.08);
+
+    .slide-icon {
+      opacity: 1;
+    }
+
+    .slide-item-name {
+      color: rgb(var(--v-theme-primary));
+    }
+  }
+
+  .slide-icon {
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+  .slide-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .slide-label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .slide-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgb(var(--v-theme-on-surface));
+    line-height: 1.3;
+  }
+
+  .slide-stain-chip {
+    font-size: 10px !important;
+    font-weight: 500;
+    height: 16px !important;
+    padding: 0 4px !important;
+    color: rgb(var(--v-theme-secondary)) !important;
+    opacity: 0.8;
+  }
+
+  .slide-id-text {
+    font-size: 10px;
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 0.4;
+    line-height: 1.2;
+    font-family: 'Roboto Mono', monospace;
+    letter-spacing: -0.3px;
+  }
+
+  .slide-stain {
+    font-size: 11px;
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 0.5;
+    line-height: 1.2;
+  }
+
+  .check-icon {
+    flex-shrink: 0;
+  }
+}
+
+/* ========================================
+   STUDIO-GRADE TOOLBAR
+   Ultra-refined, professional design
+   ======================================== */
+
+.studio-toolbar {
+  position: fixed;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1001;
+
+  /* Ultra-subtle glassmorphism */
+  background: rgba(var(--v-theme-surface), 0.72);
+  backdrop-filter: blur(40px) saturate(140%);
+  -webkit-backdrop-filter: blur(40px) saturate(140%);
+
+  /* Minimal border with precision */
+  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 14px;
+
+  /* Refined multi-layer shadow */
+  box-shadow:
+    0 0 0 0.5px rgba(var(--v-theme-on-surface), 0.04),
+    0 2px 8px -1px rgba(0, 0, 0, 0.08),
+    0 8px 24px -4px rgba(0, 0, 0, 0.12),
+    0 16px 48px -8px rgba(0, 0, 0, 0.04);
+
+  padding: 6px;
+  width: 52px;
+
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  &.toolbar-hidden {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-20px) scale(0.96);
+    pointer-events: none;
+  }
+
+  &.toolbar-mobile {
+    left: 50%;
+    top: auto;
+    bottom: 20px;
+    transform: translateX(-50%);
+    width: auto;
+    padding: 4px 8px;
+    border-radius: 18px;
+
+    &.toolbar-hidden {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px) scale(0.96);
+    }
+  }
+}
+
+.studio-toolbar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tool-item {
+  animation: toolFadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+
+  &:nth-child(1) {
+    animation-delay: 0.02s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.04s;
+  }
+
+  &:nth-child(4) {
+    animation-delay: 0.06s;
+  }
+
+  &:nth-child(5) {
+    animation-delay: 0.08s;
+  }
+
+  &:nth-child(6) {
+    animation-delay: 0.1s;
+  }
+
+  &:nth-child(8) {
+    animation-delay: 0.12s;
+  }
+
+  &:nth-child(9) {
+    animation-delay: 0.14s;
+  }
+
+  &:nth-child(11) {
+    animation-delay: 0.16s;
+  }
+
+  &:nth-child(12) {
+    animation-delay: 0.18s;
+  }
+}
+
+@keyframes toolFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tool-separator {
+  height: 0.5px;
+  margin: 5px 10px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* Studio Button - The Heart of the Design */
+.studio-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+
+  transition: all 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* Glow effect layer */
+  .btn-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 9px;
+    background: rgba(var(--v-theme-primary), 0);
+    opacity: 0;
+    transition: all 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  /* Icon */
+  .btn-icon {
+    position: relative;
+    z-index: 1;
+    font-size: 20px;
+    transition: all 0.22s cubic-bezier(0.34, 1.26, 0.64, 1);
+  }
+
+  /* Tooltip */
+  .btn-tooltip {
+    position: absolute;
+    left: 54px;
+    white-space: nowrap;
+    padding: 7px 12px;
+    border-radius: 7px;
+    background: rgba(var(--v-theme-surface), 0.95);
+    backdrop-filter: blur(20px);
+    border: 0.5px solid rgba(var(--v-theme-on-surface), 0.1);
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    opacity: 0;
+    transform: translateX(-4px);
+    pointer-events: none;
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.08),
+      0 8px 24px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s cubic-bezier(0.34, 1.26, 0.64, 1);
+    z-index: 10;
+  }
+
+  /* Hover State */
+  &:hover:not(:disabled) {
+    color: rgb(var(--v-theme-on-surface));
+
+    .btn-glow {
+      background: rgba(var(--v-theme-on-surface), 0.06);
+      opacity: 1;
+    }
+
+    .btn-icon {
+      transform: scale(1.08);
+    }
+
+    .btn-tooltip {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Active State */
+  &.is-active {
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.08);
+
+    .btn-glow {
+      background: rgba(var(--v-theme-primary), 0.12);
+      opacity: 1;
+      box-shadow:
+        inset 0 0 0 0.5px rgba(var(--v-theme-primary), 0.2),
+        0 0 0 0.5px rgba(var(--v-theme-primary), 0.08);
+    }
+
+    .btn-icon {
+      transform: scale(1.04);
+      filter: drop-shadow(0 0 6px rgba(var(--v-theme-primary), 0.3));
+    }
+
+    &:hover .btn-icon {
+      transform: scale(1.1);
+    }
+  }
+
+  /* Press State */
+  &:active:not(:disabled) {
+    transform: scale(0.94);
+
+    .btn-icon {
+      transform: scale(1);
+    }
+  }
+
+  /* Disabled State */
+  &:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+
+    .btn-icon {
+      filter: grayscale(100%);
+    }
+  }
+
+  /* Action Button Variant (for zoom controls) */
+  &.studio-btn-action:hover:not(:disabled):not(.is-active) {
+    color: rgb(var(--v-theme-secondary));
+
+    .btn-glow {
+      background: rgba(var(--v-theme-secondary), 0.08);
+    }
+
+    .btn-icon {
+      transform: scale(1.12);
+      filter: drop-shadow(0 0 4px rgba(var(--v-theme-secondary), 0.25));
+    }
+  }
+
+  /* Back Button Variant - subtle accent to stand out */
+  &.studio-btn-back {
+    color: rgb(var(--v-theme-primary));
+
+    &:hover {
+      color: rgb(var(--v-theme-primary));
+
+      .btn-glow {
+        background: rgba(var(--v-theme-primary), 0.12);
+      }
+
+      .btn-icon {
+        transform: translateX(-2px) scale(1.05);
+      }
+    }
+  }
+
+  /* Focus Mode Active - Highlighted */
+  &.studio-btn-focus-active {
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.12);
+
+    .btn-glow {
+      background: rgba(var(--v-theme-primary), 0.15);
+      opacity: 1;
+      box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.3);
+    }
+
+    .btn-icon {
+      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
+    }
+
+    &:hover {
+      color: rgb(var(--v-theme-primary));
+      background: rgba(var(--v-theme-primary), 0.18);
+
+      .btn-glow {
+        background: rgba(var(--v-theme-primary), 0.22);
+        box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.4);
+      }
+
+      .btn-icon {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 6px rgba(var(--v-theme-primary), 0.5));
+      }
+    }
+  }
+}
+
+/* Mobile Toolbar */
+.studio-toolbar-mobile {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.studio-btn-compact {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  :deep(.v-icon) {
+    transition: all 0.18s cubic-bezier(0.34, 1.26, 0.64, 1);
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.92);
+    background: rgba(var(--v-theme-on-surface), 0.04);
+
+    :deep(.v-icon) {
+      transform: scale(0.92);
+    }
+  }
+
+  &.is-active {
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.1);
+
+    :deep(.v-icon) {
+      transform: scale(1.06);
+      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
+    }
+  }
+
+  &:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+  }
+
+  /* Focus Mode Active (mobile) */
+  &.studio-btn-focus-active {
+    color: rgb(var(--v-theme-primary));
+    background: rgba(var(--v-theme-primary), 0.12);
+    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.25);
+
+    :deep(.v-icon) {
+      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
+    }
+  }
+}
+
+.compact-sep {
+  width: 0.5px;
+  height: 20px;
+  margin: 0 4px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.panel-toggle-btn {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3);
+  }
+}
+
+.fullscreen-exit-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 200;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+}
+
+.viewer-main {
+  position: relative;
+  overflow: hidden;
+  padding-top: 0 !important; // No app-bar, start from top
+}
+
+.viewer-container {
+  width: 100%;
+  height: 100%;
+  background: #1a1a1a;
+  position: relative;
+}
+
+/* ========================================
+   FLOATING STATUS CARD (Google Maps Style)
+   ======================================== */
+
+.status-card {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+
+  /* Fundo sólido */
+  background: rgb(var(--v-theme-surface));
+
+  /* Border apenas no topo e direita */
+  border-top: 0.5px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-right: 0.5px solid rgba(var(--v-theme-on-surface), 0.12);
+
+  /* Arredondamento apenas no canto superior direito */
+  border-radius: 0 8px 0 0;
+
+  /* Sombra sutil */
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
+
+  padding: 10px 16px;
+
+  transition: all 0.3s ease;
+  animation: statusCardSlideIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+
+  &.status-card-mobile {
+    padding: 8px 12px;
+  }
+}
+
+@keyframes statusCardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+
+  &.status-loading {
+    color: rgba(var(--v-theme-warning), 0.9);
+  }
+
+  &.status-coords {
+    color: rgba(var(--v-theme-on-surface), 0.7);
+  }
+}
+
+.status-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.status-label {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  font-weight: 400;
+  font-size: 11.5px;
+}
+
+.status-value {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.status-separator {
+  width: 1px;
+  height: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+  flex-shrink: 0;
+}
+
+/* ========================================
+   RIGHT PANEL - ENHANCED UX
+   ======================================== */
+
+.right-panel {
+  border-left: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
+  position: relative;
+
+  &.is-resizing {
+    transition: none !important;
+    user-select: none;
+  }
+}
+
+/* Panel Resize Handle */
+.panel-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover,
+  &:active {
+    .resize-handle-indicator {
+      opacity: 1;
+      background: rgb(var(--v-theme-primary));
+    }
+  }
+}
+
+.resize-handle-indicator {
+  width: 3px;
+  height: 48px;
+  border-radius: 3px;
+  background: rgba(var(--v-theme-on-surface), 0.15);
+  opacity: 0;
+  transition: all 0.2s ease;
+}
+
+.right-panel:hover .resize-handle-indicator {
+  opacity: 0.5;
+}
+
+/* Panel Header & Tabs */
+.panel-header {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+}
+
+.panel-tabs {
+  :deep(.v-tab) {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    font-size: 13px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      background: rgba(var(--v-theme-primary), 0.06);
+    }
+
+    &.v-tab--selected {
+      color: rgb(var(--v-theme-primary));
+    }
+  }
+
+  :deep(.v-tab__slider) {
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+  }
+}
+
+.tab-content-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.tab-label {
+  white-space: nowrap;
+}
+
+/* Panel Content Area */
+.panel-content {
+  height: calc(100vh - 56px - 64px); // Full height minus header and tabs
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* Custom scrollbar */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 3px;
+
+    &:hover {
+      background: rgba(var(--v-theme-on-surface), 0.3);
+    }
+  }
+}
+
+.tab-content {
+  padding: 20px;
+  animation: tabFadeIn 0.3s ease-out;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Section Headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* ========================================
+   LAYERS TAB STYLES
+   ======================================== */
+
+// Minimal overrides - using Vuetify defaults for performance
+
+/* ========================================
+   ANNOTATIONS TAB STYLES
+   ======================================== */
+
+.annotations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.annotation-card {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(var(--v-theme-surface-variant), 0.5);
+    border-color: rgba(var(--v-theme-primary), 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.annotation-delete-btn {
+  opacity: 0;
+  transition: all 0.2s ease;
+
+  .annotation-card:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(var(--v-theme-error), 0.1);
+  }
+}
+
+.empty-state {
+  border-radius: 10px;
+  animation: emptyStatePulse 0.5s ease-out;
+}
+
+@keyframes emptyStatePulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* ========================================
+   AI TAB STYLES
+   ======================================== */
+
+.ai-feature-card {
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.feature-active {
+    background: rgba(var(--v-theme-surface-variant), 0.4);
+    border-color: rgba(var(--v-theme-primary), 0.15);
+    box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.08);
+  }
+
+  &:hover {
+    background: rgba(var(--v-theme-surface-variant), 0.35);
+  }
+}
+
+.ai-switch {
+  :deep(.v-selection-control__input) {
+    transition: transform 0.2s ease;
+  }
+
+  &:hover :deep(.v-selection-control__input) {
+    transform: scale(1.08);
+  }
+}
+
+.opacity-control {
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========================================
+   DETAILS TAB STYLES
+   ======================================== */
+
+.details-card {
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.detail-item {
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.02);
+  }
+}
+
+.detail-row {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 0.2s ease;
+}
+
+.detail-label {
+  display: flex;
+  align-items: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.detail-value {
+  color: rgb(var(--v-theme-on-surface));
+  word-break: break-word;
+}
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 960px) {
+  .panel-toggle-btn {
+    display: none; // Hide on mobile, use topbar button instead
+  }
+
+  .studio-toolbar {
+    &.toolbar-mobile {
+      bottom: 70px; // Above status card on mobile
+    }
+  }
+
+  .status-card {
+    font-size: 11px;
+
+    .status-content {
+      gap: 8px;
+    }
+
+    .status-value {
+      font-size: 11px;
+    }
+  }
+
+  // Right Panel mobile adjustments
+  .tab-content {
+    padding: 16px;
+  }
+
+  .panel-content {
+    height: calc(100vh - 56px - 48px); // Adjusted for mobile tabs
+  }
+
+  .section-header {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  .annotation-card,
+  .layer-card,
+  .ai-feature-card,
+  .opacity-card,
+  .details-card {
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .status-card {
+    padding: 6px 10px !important;
+    font-size: 10px;
+
+    .status-icon {
+      font-size: 14px !important;
+    }
+
+    .status-value {
+      font-size: 10px;
+    }
+  }
+
+  .studio-toolbar {
+    &.toolbar-mobile {
+      bottom: 60px; // Adjust for smaller mobile
+    }
+  }
+}
+
+/* ========================================
+   ANNOTATIONS & DISCUSSION SYSTEM
+   Professional collaborative pathology UI
+   ======================================== */
+
+/* Annotations Panel */
+.annotations-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel-section-header {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.new-roi-btn {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.annotations-scroll {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 180px);
+}
+
+/* ROI Cards */
+.roi-card {
+  display: flex;
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(var(--v-theme-surface-variant), 0.4);
+    border-color: rgba(var(--v-theme-primary), 0.2);
+    transform: translateX(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  &.has-unread {
+    border-left: 3px solid rgb(var(--v-theme-error));
+
+    .roi-color-indicator {
+      display: none;
+    }
+  }
+
+  &.is-resolved {
+    opacity: 0.7;
+    background: rgba(var(--v-theme-success), 0.08);
+    border-color: rgba(var(--v-theme-success), 0.2);
+
+    .roi-name {
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+.roi-color-indicator {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.roi-content {
+  flex: 1;
+  padding: 12px;
+  min-width: 0;
+}
+
+.roi-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.priority-chip {
+  min-width: 20px;
+  font-weight: 700;
+}
+
+.participants-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.participant-avatar {
+  border: 2px solid rgb(var(--v-theme-surface));
+  font-size: 10px;
+}
+
+.last-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.message-preview {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message-time {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  flex-shrink: 0;
+}
+
+/* Empty State */
+.empty-state-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 24px;
+}
+
+.empty-state-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 240px;
+}
+
+.empty-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-primary), 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.empty-icon {
+  opacity: 0.6;
+}
+
+/* Discussion Panel */
+.discussion-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+}
+
+.discussion-header {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.roi-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.editable-name {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.08);
+
+    .edit-icon {
+      opacity: 1;
+    }
+  }
+
+  .edit-icon {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+  }
+}
+
+.annotation-name-input {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin: -4px 0;
+
+  :deep(.v-field__input) {
+    padding: 0;
+    min-height: unset;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  :deep(.v-field) {
+    padding: 0;
+  }
+}
+
+.participants-bar {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.participant-chip {
+  font-size: 11px;
+}
+
+/* Messages Container */
+.messages-container {
+  flex: 1;
+  overflow: hidden;
+  background: rgba(var(--v-theme-surface), 0.5);
+}
+
+.messages-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Message Wrapper */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+
+  &.message-own {
+    align-items: flex-end;
+  }
+
+  &.message-ai {
+    align-items: flex-start;
+  }
+}
+
+/* System Message */
+.system-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 20px;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  align-self: center;
+}
+
+/* Message Bubble */
+.message-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(var(--v-theme-surface-variant), 0.5);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+
+  &.own-bubble {
+    background: rgba(var(--v-theme-primary), 0.12);
+    border-color: rgba(var(--v-theme-primary), 0.15);
+    border-bottom-right-radius: 4px;
+  }
+
+  &.ai-bubble {
+    background: linear-gradient(135deg,
+        rgba(var(--v-theme-secondary), 0.08) 0%,
+        rgba(var(--v-theme-secondary), 0.15) 100%);
+    border-color: rgba(var(--v-theme-secondary), 0.2);
+    border-bottom-left-radius: 4px;
+  }
+}
+
+.message-author {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.author-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.ai-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-secondary), 0.2);
+  color: rgb(var(--v-theme-secondary));
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.message-content {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(var(--v-theme-on-surface));
+  word-wrap: break-word;
+}
+
+/* AI Findings Card */
+.ai-findings-card {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface), 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(var(--v-theme-secondary), 0.15);
+}
+
+.confidence-bar {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.confidence-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-secondary));
+}
+
+.findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.finding-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.finding-label {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.finding-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.4;
+}
+
+/* Typing Indicator */
+.typing-bubble {
+  min-width: 80px;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(var(--v-theme-secondary), 0.6);
+    animation: typingBounce 1.4s ease-in-out infinite;
+
+    &:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+}
+
+@keyframes typingBounce {
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Animations */
+.roi-card {
+  animation: slideInRight 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+
+  @for $i from 1 through 10 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{$i * 0.05}s;
+    }
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.message-wrapper {
+  animation: messageSlideIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .discussion-panel {
+    height: calc(100vh - 100px);
+  }
+
+  .messages-scroll {
+    padding: 12px;
+  }
+
+  .message-bubble {
+    max-width: 92%;
+    padding: 8px 12px;
+  }
+
+  .ai-findings-card {
+    padding: 10px;
+  }
+}
+
+/* ===========================================
+   AI CASE CHAT PANEL
+   =========================================== */
+
+.ai-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  background: rgb(var(--v-theme-surface));
+}
+
+.ai-chat-header {
+  flex-shrink: 0;
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.ai-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-success));
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.case-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.context-divider {
+  width: 1px;
+  height: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.ai-messages-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.ai-messages-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-welcome-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+}
+
+.welcome-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-secondary), 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.ai-case-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+.ai-case-message-wrapper.message-own {
+  align-items: flex-end;
+}
+
+.ai-case-message {
+  max-width: 90%;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.ai-case-message.ai-message {
+  background: rgba(var(--v-theme-secondary), 0.08);
+  border: 1px solid rgba(var(--v-theme-secondary), 0.12);
+  border-radius: 4px 4px 4px 0;
+}
+
+.ai-case-message.user-message {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border: 1px solid rgba(var(--v-theme-primary), 0.15);
+  border-radius: 4px 4px 0 4px;
+}
+
+.ai-case-message .message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-case-message .author-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.ai-badge-minimal {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  background: rgba(var(--v-theme-secondary), 0.15);
+  color: rgb(var(--v-theme-secondary));
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ai-case-message .message-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.ai-case-message .message-timestamp {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  margin-top: 8px;
+  text-align: right;
+}
+
+.ai-case-findings {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface), 0.6);
+  border-radius: 4px;
+  border: 1px solid rgba(var(--v-theme-secondary), 0.1);
+}
+
+.confidence-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.confidence-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.confidence-bar-container {
+  flex: 1;
+  height: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.confidence-bar-fill {
+  height: 100%;
+  background: rgb(var(--v-theme-secondary));
+  border-radius: 2px;
+  transition: width 0.5s ease-out;
+}
+
+.confidence-indicator .confidence-value {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-secondary));
+  min-width: 32px;
+  text-align: right;
+}
+
+.findings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.finding-item-minimal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.finding-label-minimal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.finding-value-minimal {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.4;
+}
+
+.ai-typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 0;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(var(--v-theme-secondary), 0.5);
+    animation: typingBounce 1.4s ease-in-out infinite;
+
+    &:nth-child(1) { animation-delay: 0s; }
+    &:nth-child(2) { animation-delay: 0.2s; }
+    &:nth-child(3) { animation-delay: 0.4s; }
+  }
+}
+
+/* AI Chat Input - Square, Minimalist Design */
+.ai-chat-input-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.ai-chat-input {
+  flex: 1;
+
+  :deep(.v-field) {
+    border-radius: 4px;
+    font-size: 13px;
+    background: rgba(var(--v-theme-surface-variant), 0.3);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  :deep(.v-field:hover) {
+    border-color: rgba(var(--v-theme-on-surface), 0.15);
+    background: rgba(var(--v-theme-surface-variant), 0.4);
+  }
+
+  :deep(.v-field--focused) {
+    border-color: rgba(var(--v-theme-secondary), 0.4);
+    background: rgba(var(--v-theme-surface), 0.9);
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-secondary), 0.08);
+  }
+
+  :deep(.v-field__outline) {
+    display: none;
+  }
+
+  :deep(.v-field__input) {
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+
+  :deep(.v-field__input::placeholder) {
+    color: rgba(var(--v-theme-on-surface), 0.35);
+  }
+}
+
+.ai-send-btn {
+  flex-shrink: 0;
+  border-radius: 4px !important;
+  height: 44px !important;
+  width: 44px !important;
+}
+
+/* Responsive adjustments for AI Chat */
+@media (max-width: 600px) {
+  .ai-chat-panel {
+    height: calc(100vh - 100px);
+  }
+
+  .ai-messages-scroll {
+    padding: 12px;
+  }
+
+  .ai-case-message {
+    max-width: 95%;
+    padding: 10px 12px;
+  }
+
+  .ai-chat-input-container {
+    padding: 12px;
+  }
+}
+
+/* ===========================================
+   REPORT PANEL (LAUDO)
+   =========================================== */
+
+.report-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+}
+
+.report-header {
+  flex-shrink: 0;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.report-form-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.report-form {
+  :deep(.v-textarea .v-field) {
+    background: rgba(var(--v-theme-surface-variant), 0.2);
+    border-radius: 8px;
+  }
+
+  :deep(.v-textarea .v-field--focused) {
+    background: rgba(var(--v-theme-surface), 1);
+  }
+}
+
+.ai-suggestion-card {
+  padding: 12px;
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-accent), 0.08),
+    rgba(var(--v-theme-accent), 0.04)
+  );
+  border: 1px solid rgba(var(--v-theme-accent), 0.15);
+  border-radius: 10px;
+
+  .ai-suggestion-text {
+    font-style: italic;
+    line-height: 1.5;
+  }
+}
+
+.report-export-actions {
+  flex-shrink: 0;
+  margin-top: auto;
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.concluded-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(var(--v-theme-success), 0.1);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgb(var(--v-theme-success));
+}
+
+/* Mobile Report */
+.mobile-report {
+  .mobile-ai-suggestion {
+    padding: 10px;
+    background: rgba(var(--v-theme-accent), 0.06);
+    border-radius: 8px;
+  }
+
+  .mobile-report-actions {
+    margin-top: 8px;
+  }
+
+  .mobile-concluded-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(var(--v-theme-success), 0.1);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgb(var(--v-theme-success));
+  }
+}
+
+/* Mobile Case Dropdown */
+.mobile-case-dropdown {
+  min-width: 280px;
+  max-width: 320px;
+  background: rgba(var(--v-theme-surface), 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+
+  .dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 8px;
+  }
+
+  .dropdown-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+  }
+
+  .slide-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+
+    &:hover {
+      background: rgba(var(--v-theme-on-surface), 0.04);
+    }
+
+    &--active {
+      background: rgba(var(--v-theme-primary), 0.06);
+    }
+
+    .slide-info {
+      flex: 1;
+      min-width: 0;
+
+      .slide-label-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .slide-item-name {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: rgb(var(--v-theme-on-surface));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .slide-stain-chip {
+        font-size: 10px !important;
+        font-weight: 500;
+        height: 16px !important;
+        padding: 0 4px !important;
+        color: rgb(var(--v-theme-secondary)) !important;
+        opacity: 0.8;
+      }
+
+      .slide-id-text {
+        display: block;
+        font-size: 10px;
+        color: rgba(var(--v-theme-on-surface), 0.4);
+        font-family: 'Roboto Mono', monospace;
+        letter-spacing: -0.3px;
+      }
+
+      .slide-stain {
+        display: block;
+        font-size: 11px;
+        color: rgba(var(--v-theme-on-surface), 0.6);
+      }
+    }
+  }
+
+  .case-action-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+
+    span {
+      font-size: 13px;
+      color: rgb(var(--v-theme-on-surface));
+    }
+
+    &:hover {
+      background: rgba(var(--v-theme-on-surface), 0.04);
+    }
+
+    &--active {
+      background: rgba(var(--v-theme-primary), 0.06);
+
+      span {
+        font-weight: 500;
+      }
+    }
+
+    &--danger:hover {
+      background: rgba(var(--v-theme-error), 0.08);
+
+      span {
+        color: rgb(var(--v-theme-error));
+      }
+    }
+  }
+}
+
+.mobile-slides-scroll {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.mobile-case-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* ===========================================
+   INVITE PATHOLOGIST DIALOG
+   =========================================== */
+
+.invite-tabs {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.pathologist-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 8px;
+}
+
+.pathologist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.04);
+  }
+
+  &--selected {
+    background: rgba(var(--v-theme-primary), 0.08);
+
+    &:hover {
+      background: rgba(var(--v-theme-primary), 0.12);
+    }
+  }
+}
+
+.pathologist-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pathologist-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pathologist-specialty {
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.6;
+}
+
+/* ===========================================
+   CASE SEARCH DIALOG
+   =========================================== */
+
+.case-search-card {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.case-search-input {
+  :deep(.v-field) {
+    border-radius: 8px;
+  }
+}
+
+.case-search-results {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.case-result-item {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: rgba(var(--v-theme-primary), 0.04);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.empty-search-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* ===========================================
+   MOBILE UI COMPONENTS
+   =========================================== */
+
+.viewer-main-mobile {
+  padding-top: 56px !important; /* Space for mobile header bar */
+  padding-bottom: 56px !important; /* Space for bottom nav */
+}
+
+/* Mobile Bottom Navigation */
+.mobile-bottom-nav {
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  overflow: visible !important;
+
+  :deep(.v-bottom-navigation__content) {
+    overflow: visible !important;
+  }
+
+  :deep(.v-btn) {
+    overflow: visible !important;
+  }
+
+  :deep(.v-badge) {
+    overflow: visible !important;
+  }
+}
+
+/* Mobile Panel Bottom Sheet */
+.mobile-panel-sheet {
+  z-index: 2000 !important;
+}
+
+.mobile-panel-card {
+  border-radius: 16px 16px 0 0 !important;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-handle {
+  padding: 8px 0 4px;
+  display: flex;
+  justify-content: center;
+}
+
+.handle-bar {
+  width: 40px;
+  height: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 2px;
+}
+
+.mobile-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(70vh - 100px);
+}
+
+/* Mobile Annotations List */
+.mobile-annotations-list {
+  min-height: 200px;
+}
+
+.mobile-roi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:active {
+    background: rgba(var(--v-theme-primary), 0.1);
+  }
+}
+
+.roi-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.roi-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.roi-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.roi-status {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+.mobile-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+/* Mobile Discussion */
+.mobile-discussion {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.mobile-discussion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.mobile-roi-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mobile-roi-name-container {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-roi-name-input {
+  :deep(.v-field) {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  :deep(.v-field__input) {
+    padding: 4px 0;
+    min-height: 28px;
+  }
+}
+
+.mobile-roi-name-editable {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover,
+  &:active {
+    background: rgba(var(--v-theme-on-surface), 0.08);
+  }
+
+  .v-icon {
+    opacity: 0.5;
+    transition: opacity 0.15s ease;
+  }
+
+  &:hover .v-icon,
+  &:active .v-icon {
+    opacity: 1;
+  }
+}
+
+.mobile-messages {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.mobile-message {
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 85%;
+  background: rgba(var(--v-theme-surface-variant), 0.5);
+  align-self: flex-start;
+
+  &.own {
+    background: rgba(var(--v-theme-primary), 0.15);
+    align-self: flex-end;
+  }
+
+  &.ai {
+    background: rgba(var(--v-theme-secondary), 0.12);
+    border-left: 3px solid rgb(var(--v-theme-secondary));
+  }
+}
+
+.mobile-message-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.mobile-author-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.message-text {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.mobile-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  background: rgb(var(--v-theme-surface));
+}
+
+.mobile-message-input {
+  flex: 1;
+
+  :deep(.v-field) {
+    border-radius: 20px;
+    font-size: 14px;
+  }
+
+  :deep(.v-field__input) {
+    padding: 8px 14px;
+    min-height: 38px;
+  }
+}
+
+/* Mobile AI Chat */
+.mobile-ai-chat {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-ai-messages {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Mobile Details */
+.mobile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.detail-label {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.detail-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+/* Mobile Tools Grid */
+.mobile-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.mobile-tools-grid .v-btn {
+  height: 70px !important;
+  border-radius: 12px !important;
+}
+
+/* Mobile Status Card */
+.status-card-mobile {
+  left: 12px !important;
+  right: auto !important;
+  bottom: 68px !important;
+  padding: 6px 10px !important;
+
+  .status-content {
+    gap: 6px;
+  }
+
+  .status-value {
+    font-size: 12px;
+  }
+}
+
+/* Mobile Focus Exit Button */
+.mobile-focus-exit-btn {
+  position: fixed !important;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 0 20px !important;
+}
+
+/* Mobile Floating Case Container */
+@media (max-width: 600px) {
+  .floating-case-container {
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .case-slide-selector {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .case-name {
+    font-size: 11px;
+    max-width: 80px;
+  }
+
+  .slide-name {
+    font-size: 11px;
+    max-width: 60px;
+  }
+
+  .slide-divider {
+    font-size: 10px;
+  }
+
+  .chevron-icon {
+    display: none;
+  }
+}
+</style>
