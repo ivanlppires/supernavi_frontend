@@ -331,23 +331,54 @@
                 </v-chip>
               </div>
 
-              <!-- Processing Progress Overlay -->
+              <!-- Processing Progress Overlay - Apple-like -->
               <div v-if="isProcessingCase(caseItem.id)" class="processing-overlay">
                 <div class="processing-overlay-content">
-                  <v-progress-circular
-                    color="white"
-                    :indeterminate="getCaseProcessingInfo(caseItem.id).progress === 0"
-                    :model-value="getCaseProcessingInfo(caseItem.id).progress"
-                    :size="48"
-                    :width="4"
-                  >
-                    <span v-if="getCaseProcessingInfo(caseItem.id).progress > 0" class="progress-text">
-                      {{ getCaseProcessingInfo(caseItem.id).progress }}%
+                  <!-- Stage Icon -->
+                  <div class="stage-icon-container">
+                    <div class="stage-icon-bg" />
+                    <v-icon
+                      :class="{ 'icon-pulse': getCaseProcessingInfo(caseItem.id).progress === 0 }"
+                      class="stage-icon"
+                      color="white"
+                      size="28"
+                    >
+                      {{ getProcessingStageIcon(getCaseProcessingInfo(caseItem.id)) }}
+                    </v-icon>
+                  </div>
+
+                  <!-- Progress Ring -->
+                  <div class="progress-ring-container">
+                    <v-progress-circular
+                      bg-color="rgba(255,255,255,0.2)"
+                      color="white"
+                      :indeterminate="getCaseProcessingInfo(caseItem.id).progress === 0"
+                      :model-value="getCaseProcessingInfo(caseItem.id).progress"
+                      :size="56"
+                      :width="3"
+                    >
+                      <span v-if="getCaseProcessingInfo(caseItem.id).progress > 0" class="progress-percent">
+                        {{ getCaseProcessingInfo(caseItem.id).progress }}%
+                      </span>
+                      <v-icon v-else color="white" size="18">mdi-loading mdi-spin</v-icon>
+                    </v-progress-circular>
+                  </div>
+
+                  <!-- Stage Label -->
+                  <div class="stage-info">
+                    <span class="stage-label">{{ getCaseProcessingInfo(caseItem.id).stageLabel }}</span>
+                    <span v-if="getCaseProcessingInfo(caseItem.id).totalCount > 1" class="stage-count">
+                      {{ getCaseProcessingInfo(caseItem.id).readyCount }}/{{ getCaseProcessingInfo(caseItem.id).totalCount }} lâminas
                     </span>
-                  </v-progress-circular>
-                  <span class="processing-label">
-                    {{ getCaseProcessingInfo(caseItem.id).stageLabel }}
-                  </span>
+                  </div>
+                </div>
+
+                <!-- Bottom Progress Bar -->
+                <div class="progress-bar-bottom">
+                  <div
+                    class="progress-bar-fill"
+                    :style="{ width: getCaseProcessingInfo(caseItem.id).progress + '%' }"
+                  />
                 </div>
               </div>
 
@@ -430,28 +461,31 @@
               </v-card-item>
 
               <v-card-text class="case-meta">
-                <div class="meta-row">
-                  <div class="meta-item">
-                    <v-icon class="me-1" size="14">mdi-account</v-icon>
-                    {{ caseItem.patientAge ?? '—' }} anos
-                    <span v-if="caseItem.patientSex" class="ms-1">• {{ caseItem.patientSex }}</span>
+                <!-- Patient Info Row -->
+                <div class="patient-info-row">
+                  <div v-if="caseItem.patientAge" class="patient-badge">
+                    <span class="patient-age">{{ caseItem.patientAge }}</span>
+                    <span class="patient-age-label">anos</span>
                   </div>
-                  <div class="meta-item">
-                    <v-icon class="me-1" size="14">mdi-image-multiple</v-icon>
-                    {{ caseItem.slidesCount ?? 0 }} lâmina(s)
+                  <div v-if="caseItem.patientSex" class="patient-sex-badge" :class="caseItem.patientSex === 'M' ? 'male' : 'female'">
+                    <v-icon size="14">{{ caseItem.patientSex === 'M' ? 'mdi-gender-male' : 'mdi-gender-female' }}</v-icon>
+                    {{ caseItem.patientSex === 'M' ? 'Masculino' : 'Feminino' }}
+                  </div>
+                  <div class="slides-badge">
+                    <v-icon size="14">mdi-layers-outline</v-icon>
+                    {{ caseItem.slidesCount ?? 0 }}
                   </div>
                 </div>
 
-                <!-- Processing Status - only show chip when NOT showing overlay -->
-                <div v-if="getProcessingStatusDisplay(caseItem.id) && !isProcessingCase(caseItem.id)" class="processing-badge">
-                  <v-chip
-                    :color="getProcessingStatusDisplay(caseItem.id)?.color"
-                    :prepend-icon="getProcessingStatusDisplay(caseItem.id)?.icon"
-                    size="small"
-                    variant="tonal"
-                  >
-                    {{ getProcessingStatusDisplay(caseItem.id)?.label }}
-                  </v-chip>
+                <!-- Processing Status Badge - only show when NOT showing overlay -->
+                <div v-if="getProcessingStatusDisplay(caseItem.id) && !isProcessingCase(caseItem.id)" class="processing-status-badge">
+                  <div class="status-badge-content" :class="getProcessingStatusDisplay(caseItem.id)?.color">
+                    <v-icon size="14">{{ getProcessingStatusDisplay(caseItem.id)?.icon }}</v-icon>
+                    <span>{{ getProcessingStatusDisplay(caseItem.id)?.label }}</span>
+                    <span v-if="getProcessingStatusDisplay(caseItem.id)?.progress" class="status-progress">
+                      {{ getProcessingStatusDisplay(caseItem.id)?.progress }}%
+                    </span>
+                  </div>
                 </div>
               </v-card-text>
 
@@ -1578,6 +1612,23 @@
       concluido: 'Concluído',
     }
     return labels[status] || status
+  }
+
+  // Get icon for processing stage based on progress
+  function getProcessingStageIcon (info: { status: string, progress: number, uploadingCount: number, processingCount: number, pendingCount: number }): string {
+    if (info.uploadingCount > 0 || info.progress < 10) {
+      return 'mdi-cloud-upload'
+    }
+    if (info.pendingCount > 0 && info.progress === 0) {
+      return 'mdi-clock-outline'
+    }
+    if (info.progress < 50) {
+      return 'mdi-cog-sync'
+    }
+    if (info.progress < 95) {
+      return 'mdi-cloud-upload'
+    }
+    return 'mdi-check-circle'
   }
 
   // Report/Laudo helper functions
@@ -3749,47 +3800,115 @@ $color-accent: #34C759;
   }
 }
 
-// Processing Overlay for cards
-// Processing Overlay - Apple-like
+// Processing Overlay - Apple-like with gradient
 .processing-overlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 120px;
-  background: rgba(0, 122, 255, 0.85);
-  backdrop-filter: blur(10px) saturate(180%);
-  -webkit-backdrop-filter: blur(10px) saturate(180%);
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.92) 0%, rgba(88, 86, 214, 0.92) 100%);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 5;
   border-radius: 12px 12px 0 0;
+  overflow: hidden;
 }
 
 .v-theme--medicalDark .processing-overlay {
-  background: rgba(10, 132, 255, 0.85);
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.92) 0%, rgba(94, 92, 230, 0.92) 100%);
 }
 
 .processing-overlay-content {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  padding: 0 16px;
+  width: 100%;
 }
 
-.progress-text {
-  font-size: 12px;
-  font-weight: 600;
+.stage-icon-container {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-icon-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+.stage-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.icon-pulse {
+  animation: iconPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.progress-ring-container {
+  flex-shrink: 0;
+}
+
+.progress-percent {
+  font-size: 11px;
+  font-weight: 700;
   color: white;
+  letter-spacing: -0.02em;
 }
 
-.processing-label {
+.stage-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stage-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.95);
+  color: white;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
   font-weight: 500;
-  text-align: center;
-  max-width: 180px;
+}
+
+.progress-bar-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: white;
+  transition: width 0.3s ease;
+  border-radius: 0 2px 2px 0;
 }
 
 // Case Card Typography - Apple-like
@@ -3998,51 +4117,122 @@ $color-accent: #34C759;
 
 // Case Meta - Apple-like
 .case-meta {
-  padding-top: 0 !important;
+  padding-top: 4px !important;
   padding-bottom: 14px !important;
 }
 
-.meta-row {
+// Patient Info Row - Apple-like badges
+.patient-info-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: rgba(var(--v-theme-on-surface), 0.5);
+  gap: 8px;
+  align-items: center;
 }
 
-.meta-item {
+.patient-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 4px 10px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-radius: 8px;
+
+  .patient-age {
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    letter-spacing: -0.02em;
+  }
+
+  .patient-age-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: rgba(var(--v-theme-primary), 0.7);
+  }
+}
+
+.patient-sex-badge {
   display: flex;
   align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+
+  &.male {
+    background: rgba(10, 132, 255, 0.1);
+    color: rgb(10, 132, 255);
+  }
+
+  &.female {
+    background: rgba(255, 45, 85, 0.1);
+    color: rgb(255, 45, 85);
+  }
+}
+
+.slides-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 
   .v-icon {
-    opacity: 0.6;
+    opacity: 0.7;
   }
 }
 
-// Processing Badge - Apple-like
-.processing-badge {
-  margin-top: 12px;
+// Processing Status Badge - Apple-like
+.processing-status-badge {
+  margin-top: 10px;
+}
 
-  .v-chip {
-    font-size: 0.6875rem;
-    font-weight: 500;
-    height: 24px;
-    border-radius: 6px;
+.status-badge-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+
+  &.success {
+    background: rgba(52, 199, 89, 0.12);
+    color: rgb(52, 199, 89);
   }
 
-  .processing-animated {
-    animation: pulse-processing 1.5s ease-in-out infinite;
+  &.warning {
+    background: rgba(255, 149, 0, 0.12);
+    color: rgb(255, 149, 0);
+  }
+
+  &.info {
+    background: rgba(0, 122, 255, 0.12);
+    color: rgb(0, 122, 255);
+    animation: pulseStatus 2s ease-in-out infinite;
+  }
+
+  &.error {
+    background: rgba(255, 59, 48, 0.12);
+    color: rgb(255, 59, 48);
+  }
+
+  .status-progress {
+    padding-left: 4px;
+    border-left: 1px solid currentColor;
+    opacity: 0.7;
+    margin-left: 2px;
   }
 }
 
-@keyframes pulse-processing {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
+@keyframes pulseStatus {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 // Case Footer - Apple-like
