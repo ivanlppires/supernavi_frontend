@@ -196,11 +196,12 @@
   import type OpenSeadragon from 'openseadragon'
   import type { Slide } from '@/api/types'
   import type { MeasurementResult, ROI, ROICoordinates, ViewerSlide } from '@/composables/useViewer'
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
   import { useRoute } from 'vue-router'
   import { slidesApi } from '@/api/slides'
   import DziViewer from '@/components/DziViewer.vue'
   import { useCases } from '@/composables/useCases'
+  import { useEdgeFirstTileSource } from '@/composables/useEdgeFirstTileSource'
   import { useSignedTileSource } from '@/composables/useSignedTileSource'
   import { useSlides } from '@/composables/useSlides'
   import { useViewer } from '@/composables/useViewer'
@@ -218,6 +219,16 @@
   const casesStore = useCases()
   const slidesStore = useSlides()
   const signedTileSource = useSignedTileSource()
+  const edgeFirstTileSource = useEdgeFirstTileSource()
+
+  // Provide edge-first state to layout for TileSourceBadge
+  provide('edgeFirstTileSource', {
+    origin: edgeFirstTileSource.origin,
+    edgeAgentId: edgeFirstTileSource.edgeAgentId,
+    edgeAvailable: edgeFirstTileSource.edgeAvailable,
+    fallbackReason: edgeFirstTileSource.fallbackReason,
+    isLoading: edgeFirstTileSource.isLoading,
+  })
 
   // Refs
   const dziViewerRef = ref<InstanceType<typeof DziViewer> | null>(null)
@@ -309,7 +320,7 @@
     const samples = history.slice(-5)
     if (samples.length < 2) return null
 
-    const lastSample = samples.at(-1)
+    const lastSample = samples[samples.length - 1]
     const firstSample = samples[0]
     if (!lastSample || !firstSample) return null
 
@@ -348,6 +359,7 @@
   }
 
   // Computed: tile source from current slide
+  // Priority: edge-first > signed S3 > direct URL
   const tileSource = computed(() => {
     // ONLY load slides that are fully ready
     // Don't allow 'uploading' status - tiles are incomplete and cause 404 loops
@@ -356,19 +368,22 @@
       return undefined
     }
 
-    // If we have a signed tile source loaded, use it
+    // Priority 1: Edge-first tile source (local edge or cloud preview)
+    if (edgeFirstTileSource.tileSource.value) {
+      return edgeFirstTileSource.tileSource.value
+    }
+
+    // Priority 2: Signed S3 tile source (cloud API)
     if (signedTileSource.tileSource.value) {
       return signedTileSource.tileSource.value
     }
 
-    // If slide has dziPath that's a full URL (not S3), use as-is
+    // Priority 3: Direct URL (legacy)
     if (currentSlide.value.dziPath?.startsWith('http')) {
       return currentSlide.value.dziPath
     }
 
-    // For S3-based slides, we need to wait for signed tile source to load
-    // Don't fallback to raw dziPath as it's not a valid URL
-    // The signed tile source will be loaded by loadSlideWithSignedUrls
+    // For S3-based slides, we need to wait for tile source to load
     return undefined
   })
 
@@ -395,8 +410,15 @@
   })
 
   // Thumbnail URL for smooth loading placeholder
+  // Priority: edge-first > cloud API
   const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://api.supernavi.app') + '/api'
   const currentThumbnailUrl = computed(() => {
+    // Use edge-first thumbnail if available
+    if (edgeFirstTileSource.thumbnailUrl.value) {
+      return edgeFirstTileSource.thumbnailUrl.value
+    }
+
+    // Fall back to cloud API thumbnail
     if (!currentSlide.value?.thumbnailUrl) return ''
     const token = localStorage.getItem('supernavi_token')
     if (!token) return ''
@@ -545,29 +567,53 @@
     viewerControls.updateZoom(zoom)
   }
 
-  // Load signed tile source for a slide
-  async function loadSlideWithSignedUrls (slide: Slide) {
+  // Load tile source for a slide using edge-first strategy
+  // Priority: local edge > cloud preview > signed S3
+  async function loadSlideWithEdgeFirst (slide: Slide) {
     // Only load when slide is fully ready - uploading causes 404 loops
-    if (!slide.dziPath || slide.processingStatus !== 'ready') {
-      console.log('[ViewerPage] Slide not ready or no dziPath, skipping signed URLs')
+    if (slide.processingStatus !== 'ready') {
+      console.log('[ViewerPage] Slide not ready, skipping tile source loading')
+      return
+    }
+
+    const slideId = slide.id
+
+    // Try edge-first if configured
+    if (edgeFirstTileSource.isEdgeConfigured.value) {
+      console.log('[ViewerPage] Trying edge-first for slide:', slideId)
+      try {
+        await edgeFirstTileSource.load(slideId)
+        console.log('[ViewerPage] Edge-first loaded successfully, origin:', edgeFirstTileSource.origin.value)
+        return // Success - no need for fallback
+      } catch (error) {
+        console.warn('[ViewerPage] Edge-first failed, falling back to signed URLs:', error)
+      }
+    }
+
+    // Fallback to signed S3 URLs
+    if (!slide.dziPath) {
+      console.log('[ViewerPage] No dziPath available, cannot load from S3')
       return
     }
 
     // Extract slideId from dziPath (format: "slides/{slideId}/{slideId}.dzi")
-    const slideId = extractSlideIdFromDziPath(slide.dziPath)
-    if (!slideId) {
+    const s3SlideId = extractSlideIdFromDziPath(slide.dziPath)
+    if (!s3SlideId) {
       console.log('[ViewerPage] Could not extract slideId from dziPath:', slide.dziPath)
       return
     }
 
-    console.log('[ViewerPage] Loading signed tile source for slide:', slideId)
+    console.log('[ViewerPage] Loading signed tile source for slide:', s3SlideId)
     try {
-      await signedTileSource.load({ slideId })
+      await signedTileSource.load({ slideId: s3SlideId })
       console.log('[ViewerPage] Signed tile source loaded successfully')
     } catch (error) {
       console.error('[ViewerPage] Failed to load signed tile source:', error)
     }
   }
+
+  // Alias for backward compatibility
+  const loadSlideWithSignedUrls = loadSlideWithEdgeFirst
 
   // Poll for processing progress
   async function pollProgress () {
@@ -735,6 +781,7 @@
   onBeforeUnmount(() => {
     stopProgressPolling()
     viewerControls.unregisterViewer()
+    edgeFirstTileSource.clear()
     signedTileSource.clearCache()
     console.log('[ViewerPage] Unmounted')
   })
@@ -749,16 +796,20 @@
     }
   })
 
-  // Watch for slide changes to load new signed tile source
+  // Watch for slide changes to load new tile source (edge-first)
   watch(currentSlide, async (newSlide, oldSlide) => {
     if (newSlide && newSlide.id !== oldSlide?.id) {
-      console.log('[ViewerPage] Slide changed, loading signed URLs...')
+      console.log('[ViewerPage] Slide changed, loading tile source (edge-first)...')
+
+      // Clear previous tile sources
+      edgeFirstTileSource.clear()
       signedTileSource.clearCache()
 
       // Update active slide ID in composable (so layout stays in sync)
       viewerControls.setActiveSlideId(newSlide.id)
 
-      await loadSlideWithSignedUrls(newSlide)
+      // Load new tile source with edge-first strategy
+      await loadSlideWithEdgeFirst(newSlide)
 
       // Also update slide name in header
       if (currentCase.value) {

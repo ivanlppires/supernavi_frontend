@@ -1726,6 +1726,16 @@
             <span class="status-label">tiles</span>
           </div>
 
+          <!-- Tile Source Badge (Local/Cloud) -->
+          <div v-if="edgeFirstState && edgeFirstState.origin.value !== 'unknown'" class="status-separator" />
+          <TileSourceBadge
+            v-if="edgeFirstState && edgeFirstState.origin.value !== 'unknown'"
+            :edge-agent-id="edgeFirstState.edgeAgentId.value"
+            :edge-available="edgeFirstState.edgeAvailable.value"
+            :fallback-reason="edgeFirstState.fallbackReason.value"
+            :origin="edgeFirstState.origin.value"
+          />
+
           <!-- Loading Indicator -->
           <div v-if="!viewerControls.isViewerReady.value" class="status-separator" />
           <div v-if="!viewerControls.isViewerReady.value" class="status-item status-loading">
@@ -2052,7 +2062,9 @@
 
 <script setup lang="ts">
   import type { MeasurementResult, ROI } from '@/composables/useViewer'
-  import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+  import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+  import type { TileSourceOrigin } from '@/composables/useEdgeFirstTileSource'
+  import TileSourceBadge from '@/components/TileSourceBadge.vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay, useTheme } from 'vuetify'
   import { useViewer } from '@/composables/useViewer'
@@ -2066,6 +2078,16 @@
 
   // Viewer Controls (global state)
   const viewerControls = useViewer()
+
+  // Edge-first tile source state (injected from viewer page)
+  interface EdgeFirstState {
+    origin: { value: TileSourceOrigin }
+    edgeAgentId: { value: string }
+    edgeAvailable: { value: boolean }
+    fallbackReason: { value: string | null }
+    isLoading: { value: boolean }
+  }
+  const edgeFirstState = inject<EdgeFirstState | null>('edgeFirstTileSource', null)
 
   // Theme
   const theme = useTheme()
