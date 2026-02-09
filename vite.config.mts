@@ -68,11 +68,15 @@ export default defineConfig({
   ],
   optimizeDeps: {
     exclude: [
-      'vuetify',
       'vue-router',
       'unplugin-vue-router/runtime',
       'unplugin-vue-router/data-loaders',
       'unplugin-vue-router/data-loaders/basic',
+    ],
+    include: [
+      'vuetify',
+      'vuetify/components',
+      'vuetify/directives',
     ],
   },
   define: { 'process.env': {} },
@@ -98,6 +102,7 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         ws: true,
+        timeout: 40000, // 40s to allow for on-demand tile generation
       },
       // Proxy preview requests to cloud preview proxy
       '/preview': {

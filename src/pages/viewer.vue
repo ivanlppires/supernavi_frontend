@@ -4,16 +4,8 @@
     <Transition name="fade">
       <div v-if="showEmptyState" class="empty-state">
         <div class="empty-state-content">
-          <!-- Simple loading state -->
-          <template v-if="viewerControls.state.value.isLoading && !isSlideProcessing">
-            <div class="empty-state-icon">
-              <v-icon color="primary" opacity="0.6" size="80">mdi-microscope</v-icon>
-            </div>
-            <h2 class="empty-state-title">Carregando lâmina...</h2>
-          </template>
-
           <!-- No slide state -->
-          <template v-else-if="!currentSlide">
+          <template v-if="!currentSlide">
             <div class="empty-state-icon">
               <v-icon color="primary" opacity="0.6" size="80">mdi-microscope</v-icon>
             </div>
@@ -143,14 +135,6 @@
             </v-btn>
           </template>
 
-          <!-- Unknown state -->
-          <template v-else>
-            <div class="empty-state-icon">
-              <v-icon color="primary" opacity="0.6" size="80">mdi-microscope</v-icon>
-            </div>
-            <h2 class="empty-state-title">Aguardando...</h2>
-            <p class="empty-state-description">Carregando informações da lâmina...</p>
-          </template>
         </div>
 
         <!-- Background pattern (only for non-processing states) -->
@@ -198,6 +182,7 @@
   import type { MeasurementResult, ROI, ROICoordinates, ViewerSlide } from '@/composables/useViewer'
   import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
   import { useRoute } from 'vue-router'
+  import { apiClient } from '@/api/client'
   import { slidesApi } from '@/api/slides'
   import DziViewer from '@/components/DziViewer.vue'
   import { useCases } from '@/composables/useCases'
@@ -220,6 +205,10 @@
   const slidesStore = useSlides()
   const signedTileSource = useSignedTileSource()
   const edgeFirstTileSource = useEdgeFirstTileSource()
+
+  // Read-only mode (magic links)
+  const isReadOnly = ref(false)
+  provide('viewerReadOnly', isReadOnly)
 
   // Provide edge-first state to layout for TileSourceBadge
   provide('edgeFirstTileSource', {
@@ -404,9 +393,12 @@
     return mode
   })
 
-  // Show empty state when no tile source is available
+  // Show empty state only for specific states (not for normal loading - DziViewer handles that)
   const showEmptyState = computed(() => {
-    return !tileSource.value
+    // Don't show empty state if we have a tile source (viewer is ready)
+    if (tileSource.value) return false
+    // Show for: no slide, processing, or failed states
+    return !currentSlide.value || isSlideProcessing.value || currentSlide.value?.processingStatus === 'failed'
   })
 
   // Thumbnail URL for smooth loading placeholder
@@ -477,6 +469,17 @@
     console.log('[ViewerPage] Slide loaded successfully')
     viewerControls.state.value.isLoading = false
     viewerControls.state.value.isReady = true
+
+    // Set magnification metadata from manifest
+    const manifest = edgeFirstTileSource.manifest.value
+    if (manifest) {
+      viewerControls.setMagnificationMetadata(
+        manifest.appMag ?? null,
+        manifest.mpp ?? null,
+        manifest.width,
+        manifest.height,
+      )
+    }
 
     // Estimate total tiles based on pyramid structure
     if (dziViewerRef.value?.viewer) {
@@ -700,10 +703,53 @@
     }
   }
 
+  // Magic link support: load slide directly with token, no case needed
+  async function loadFromMagicLink (slideId: string, token: string) {
+    console.log('[ViewerPage] Loading via magic link, slideId:', slideId)
+
+    // Magic links are always read-only
+    isReadOnly.value = true
+
+    // Store token for this session's API calls
+    const previousToken = apiClient.getToken()
+    apiClient.setToken(token)
+
+    try {
+      const slide = await slidesApi.get(slideId)
+      slides.value = [slide]
+      currentSlideIndex.value = 0
+
+      viewerControls.setSlides([convertToViewerSlide(slide)])
+      viewerControls.setActiveSlideId(slide.id)
+      viewerControls.setSlideInfo('Magic Link', slide.name)
+
+      if (slide.processingStatus === 'ready') {
+        await loadSlideWithEdgeFirst(slide)
+      } else if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending') {
+        startProgressPolling()
+      }
+    } catch (error) {
+      console.error('[ViewerPage] Magic link load failed:', error)
+      // Restore previous token if magic link fails
+      if (previousToken) {
+        apiClient.setToken(previousToken)
+      } else {
+        apiClient.clearToken()
+      }
+    }
+  }
+
   // Load case and slides from API
   async function loadCaseData () {
     const caseId = route.query.caseId as string
     const slideId = route.query.slideId as string
+    const magicToken = route.query.t as string
+
+    // Handle magic link access (no auth required)
+    if (magicToken && slideId) {
+      await loadFromMagicLink(slideId, magicToken)
+      return
+    }
 
     if (caseId) {
       console.log('[ViewerPage] Loading case:', caseId)

@@ -35,6 +35,7 @@
                   v-if="authStore.user?.avatar"
                   alt="Avatar"
                   class="avatar-img"
+                  referrerpolicy="no-referrer"
                   :src="authStore.user.avatar"
                   @error="($event.target as HTMLImageElement).style.display = 'none'"
                 >
@@ -50,6 +51,7 @@
                   v-if="authStore.user?.avatar"
                   alt="Avatar"
                   class="avatar-img"
+                  referrerpolicy="no-referrer"
                   :src="authStore.user.avatar"
                   @error="($event.target as HTMLImageElement).style.display = 'none'"
                 >
@@ -171,6 +173,16 @@
           </div>
 
           <div class="toolbar-right">
+            <!-- Empty Trash Button -->
+            <button
+              v-if="activeTab === 'trash' && trashCount > 0"
+              class="empty-trash-btn"
+              @click="showEmptyTrashConfirm = true"
+            >
+              <v-icon size="16">mdi-delete-sweep</v-icon>
+              <span>Limpar Lixeira</span>
+            </button>
+
             <div class="search-container">
               <v-icon class="search-icon" size="16">mdi-magnify</v-icon>
               <input
@@ -270,282 +282,38 @@
           </div>
         </div>
 
-        <Transition mode="out-in" :name="pageTransition">
-          <div :key="currentPage" class="cases-grid">
-            <v-card
-              v-for="caseItem in paginatedCases"
-              :key="caseItem.id"
-              class="case-card"
-              :class="{ 'is-collab': !caseItem.isOwner }"
-              draggable="true"
-              :loading="isProcessingCase(caseItem.id)"
-              @click="openCase(caseItem)"
-              @dragend="handleCardDragEnd"
-              @dragstart="handleCardDragStart($event, caseItem)"
-            >
-              <template #loader="{ isActive }">
-                <v-progress-linear
-                  :active="isActive"
-                  color="primary"
-                  height="3"
-                  indeterminate
-                />
-              </template>
+        <!-- Scrollable cases area -->
+        <div class="cases-scroll-area">
+          <Transition mode="out-in" :name="pageTransition">
+            <div :key="currentPage" class="cases-grid">
+              <!-- Case Card Component - Apple-like Design -->
+              <CaseCard
+                v-for="caseItem in paginatedCases"
+                :key="caseItem.id"
+                :case-item="caseItem"
+                :active-tab="activeTab"
+                :downloading-report="downloadingReport"
+                :processing-info="getCaseProcessingInfo(caseItem.id)"
+                :thumbnail-urls="getThumbnailUrls(caseItem.id)"
+                @add-slides="openAddSlidesDialog(caseItem)"
+                @click="openCase(caseItem)"
+                @confirm-delete="confirmDeleteCase(caseItem)"
+                @download-report="downloadReport(caseItem)"
+                @drag-end="handleCardDragEnd"
+                @drag-start="(e: DragEvent) => handleCardDragStart(e, caseItem)"
+                @invite-collaborator="openInviteCollaboratorDialog(caseItem)"
+                @move-to="(location) => moveCaseToLocation(caseItem, location)"
+                @thumbnail-error="handleThumbnailError"
+              />
+            </div>
+          </Transition>
 
-              <!-- Thumbnail Image -->
-              <v-img
-                v-if="getThumbnailUrl(caseItem)"
-                class="case-thumbnail"
-                cover
-                height="120"
-                :src="getThumbnailUrl(caseItem)!"
-                @error="handleThumbnailError"
-              >
-                <template #placeholder>
-                  <div class="d-flex align-center justify-center fill-height">
-                    <v-progress-circular color="primary" indeterminate size="24" />
-                  </div>
-                </template>
-                <!-- Status chip overlay -->
-                <div class="thumbnail-overlay">
-                  <v-chip
-                    :color="getStatusColor(caseItem.status)"
-                    size="small"
-                    variant="elevated"
-                  >
-                    {{ getStatusLabel(caseItem.status) }}
-                  </v-chip>
-                </div>
-              </v-img>
-
-              <!-- Placeholder when no thumbnail -->
-              <div v-else class="case-placeholder">
-                <v-icon color="primary" size="40">mdi-microscope</v-icon>
-                <v-chip
-                  class="status-chip-placeholder"
-                  :color="getStatusColor(caseItem.status)"
-                  size="small"
-                  variant="elevated"
-                >
-                  {{ getStatusLabel(caseItem.status) }}
-                </v-chip>
-              </div>
-
-              <!-- Processing Progress Overlay - Apple-like -->
-              <div v-if="isProcessingCase(caseItem.id)" class="processing-overlay">
-                <div class="processing-overlay-content">
-                  <!-- Stage Icon -->
-                  <div class="stage-icon-container">
-                    <div class="stage-icon-bg" />
-                    <v-icon
-                      :class="{ 'icon-pulse': getCaseProcessingInfo(caseItem.id).progress === 0 }"
-                      class="stage-icon"
-                      color="white"
-                      size="28"
-                    >
-                      {{ getProcessingStageIcon(getCaseProcessingInfo(caseItem.id)) }}
-                    </v-icon>
-                  </div>
-
-                  <!-- Progress Ring -->
-                  <div class="progress-ring-container">
-                    <v-progress-circular
-                      bg-color="rgba(255,255,255,0.2)"
-                      color="white"
-                      :indeterminate="getCaseProcessingInfo(caseItem.id).progress === 0"
-                      :model-value="getCaseProcessingInfo(caseItem.id).progress"
-                      :size="56"
-                      :width="3"
-                    >
-                      <span v-if="getCaseProcessingInfo(caseItem.id).progress > 0" class="progress-percent">
-                        {{ getCaseProcessingInfo(caseItem.id).progress }}%
-                      </span>
-                      <v-icon v-else color="white" size="18">mdi-loading mdi-spin</v-icon>
-                    </v-progress-circular>
-                  </div>
-
-                  <!-- Stage Label -->
-                  <div class="stage-info">
-                    <span class="stage-label">{{ getCaseProcessingInfo(caseItem.id).stageLabel }}</span>
-                    <span v-if="getCaseProcessingInfo(caseItem.id).totalCount > 1" class="stage-count">
-                      {{ getCaseProcessingInfo(caseItem.id).readyCount }}/{{ getCaseProcessingInfo(caseItem.id).totalCount }} lâminas
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Bottom Progress Bar -->
-                <div class="progress-bar-bottom">
-                  <div
-                    class="progress-bar-fill"
-                    :style="{ width: getCaseProcessingInfo(caseItem.id).progress + '%' }"
-                  />
-                </div>
-              </div>
-
-              <v-card-item>
-                <v-card-title class="case-title">
-                  {{ caseItem.patientName }}
-                </v-card-title>
-
-                <v-card-subtitle class="case-subtitle">
-                  <span class="case-number">{{ caseItem.caseNumber }}</span>
-                  <v-icon
-                    v-if="!caseItem.isOwner"
-                    class="ms-1"
-                    color="secondary"
-                    icon="mdi-account-group"
-                    size="small"
-                  />
-                </v-card-subtitle>
-
-                <template #append>
-                  <v-menu location="bottom end" offset="4">
-                    <template #activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        class="card-menu-btn"
-                        icon
-                        size="small"
-                        variant="text"
-                        @click.stop
-                      >
-                        <v-icon>mdi-dots-vertical</v-icon>
-                      </v-btn>
-                    </template>
-                    <div class="apple-menu">
-                      <button
-                        v-if="caseItem.isOwner && activeTab !== 'trash'"
-                        class="apple-menu-item"
-                        @click.stop="openAddSlidesDialog(caseItem)"
-                      >
-                        <v-icon size="18">mdi-plus</v-icon>
-                        <span>Adicionar Lâminas</span>
-                      </button>
-                      <div v-if="caseItem.isOwner && activeTab !== 'trash'" class="apple-menu-divider" />
-                      <button
-                        v-if="activeTab !== 'inbox'"
-                        class="apple-menu-item"
-                        @click.stop="moveCaseToLocation(caseItem, 'inbox')"
-                      >
-                        <v-icon size="18">mdi-inbox</v-icon>
-                        <span>Mover para Entrada</span>
-                      </button>
-                      <button
-                        v-if="activeTab !== 'archived'"
-                        class="apple-menu-item"
-                        @click.stop="moveCaseToLocation(caseItem, 'archived')"
-                      >
-                        <v-icon size="18">mdi-archive</v-icon>
-                        <span>Arquivar</span>
-                      </button>
-                      <button
-                        v-if="activeTab !== 'trash'"
-                        class="apple-menu-item destructive"
-                        @click.stop="moveCaseToLocation(caseItem, 'trash')"
-                      >
-                        <v-icon size="18">mdi-trash-can</v-icon>
-                        <span>Mover para Lixeira</span>
-                      </button>
-                      <div v-if="activeTab === 'trash'" class="apple-menu-divider" />
-                      <button
-                        v-if="activeTab === 'trash'"
-                        class="apple-menu-item destructive"
-                        @click.stop="confirmDeleteCase(caseItem)"
-                      >
-                        <v-icon size="18">mdi-trash-can</v-icon>
-                        <span>Excluir Permanentemente</span>
-                      </button>
-                    </div>
-                  </v-menu>
-                </template>
-              </v-card-item>
-
-              <v-card-text class="case-meta">
-                <!-- Patient Info Row -->
-                <div class="patient-info-row">
-                  <div v-if="caseItem.patientAge" class="patient-badge">
-                    <span class="patient-age">{{ caseItem.patientAge }}</span>
-                    <span class="patient-age-label">anos</span>
-                  </div>
-                  <div v-if="caseItem.patientSex" class="patient-sex-badge" :class="caseItem.patientSex === 'M' ? 'male' : 'female'">
-                    <v-icon size="14">{{ caseItem.patientSex === 'M' ? 'mdi-gender-male' : 'mdi-gender-female' }}</v-icon>
-                    {{ caseItem.patientSex === 'M' ? 'Masculino' : 'Feminino' }}
-                  </div>
-                  <div class="slides-badge">
-                    <v-icon size="14">mdi-layers-outline</v-icon>
-                    {{ caseItem.slidesCount ?? 0 }}
-                  </div>
-                </div>
-
-                <!-- Processing Status Badge - only show when NOT showing overlay -->
-                <div v-if="getProcessingStatusDisplay(caseItem.id) && !isProcessingCase(caseItem.id)" class="processing-status-badge">
-                  <div class="status-badge-content" :class="getProcessingStatusDisplay(caseItem.id)?.color">
-                    <v-icon size="14">{{ getProcessingStatusDisplay(caseItem.id)?.icon }}</v-icon>
-                    <span>{{ getProcessingStatusDisplay(caseItem.id)?.label }}</span>
-                    <span v-if="getProcessingStatusDisplay(caseItem.id)?.progress" class="status-progress">
-                      {{ getProcessingStatusDisplay(caseItem.id)?.progress }}%
-                    </span>
-                  </div>
-                </div>
-              </v-card-text>
-
-              <v-divider />
-
-              <v-card-actions class="case-footer">
-                <span class="case-date">
-                  <v-icon class="me-1" size="12">mdi-calendar</v-icon>
-                  {{ formatDate(caseItem.createdAt) }}
-                </span>
-                <v-spacer />
-
-                <!-- Report/Laudo Download Button -->
-                <v-tooltip location="top" :text="getReportTooltip(caseItem.status)">
-                  <template #activator="{ props }">
-                    <v-btn
-                      v-bind="props"
-                      class="report-btn"
-                      :color="getReportButtonColor(caseItem.status)"
-                      density="comfortable"
-                      :disabled="caseItem.status !== 'concluido'"
-                      icon
-                      :loading="downloadingReport === caseItem.id"
-                      size="small"
-                      :variant="caseItem.status === 'concluido' ? 'tonal' : 'text'"
-                      @click.stop="downloadReport(caseItem)"
-                    >
-                      <v-icon :size="18">{{ getReportIcon(caseItem.status) }}</v-icon>
-                    </v-btn>
-                  </template>
-                </v-tooltip>
-
-                <v-chip
-                  v-if="caseItem.isOwner"
-                  color="primary"
-                  size="x-small"
-                  variant="tonal"
-                >
-                  <v-icon size="12" start>mdi-account</v-icon>
-                  Meu caso
-                </v-chip>
-                <v-chip
-                  v-else
-                  color="secondary"
-                  size="x-small"
-                  variant="tonal"
-                >
-                  <v-icon size="12" start>mdi-account-group</v-icon>
-                  {{ caseItem.ownerName || 'Colaboração' }}
-                </v-chip>
-              </v-card-actions>
-            </v-card>
+          <!-- Empty State -->
+          <div v-if="filteredCases.length === 0" class="empty-state">
+            <v-icon color="disabled" size="48">{{ emptyStateIcon }}</v-icon>
+            <p class="empty-title">{{ emptyStateTitle }}</p>
+            <p class="empty-subtitle">{{ emptyStateSubtitle }}</p>
           </div>
-        </Transition>
-
-        <!-- Empty State -->
-        <div v-if="filteredCases.length === 0" class="empty-state">
-          <v-icon color="disabled" size="48">{{ emptyStateIcon }}</v-icon>
-          <p class="empty-title">{{ emptyStateTitle }}</p>
-          <p class="empty-subtitle">{{ emptyStateSubtitle }}</p>
         </div>
 
         <!-- Pagination -->
@@ -686,7 +454,7 @@
           <div class="avatar-upload-section">
             <div class="avatar-upload-wrapper" @click="triggerAvatarUpload">
               <v-avatar color="primary" size="88">
-                <v-img v-if="authStore.user?.avatar" cover :src="authStore.user.avatar" />
+                <v-img v-if="authStore.user?.avatar" cover referrerpolicy="no-referrer" :src="authStore.user.avatar" />
                 <span v-else class="text-h4 font-weight-bold">{{ authStore.userInitials }}</span>
               </v-avatar>
               <div class="avatar-overlay">
@@ -803,6 +571,86 @@
             </div>
           </div>
         </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <!-- Invite Collaborator Dialog -->
+    <v-dialog v-model="showInviteCollaboratorDialog" max-width="440">
+      <v-card class="invite-collaborator-dialog">
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>Convidar Colaborador</span>
+          <v-btn icon size="small" variant="text" @click="closeInviteCollaboratorDialog">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text>
+          <p v-if="inviteCollaboratorCase" class="case-info mb-4">
+            <v-icon class="mr-1" size="16">mdi-folder-outline</v-icon>
+            {{ inviteCollaboratorCase.caseNumber }} - {{ inviteCollaboratorCase.patientName }}
+          </p>
+
+          <v-text-field
+            v-model="collaboratorSearch"
+            autofocus
+            class="mb-2"
+            clearable
+            density="compact"
+            hide-details
+            label="Buscar por nome ou email"
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined"
+            @update:model-value="searchCollaborators"
+          />
+
+          <div v-if="isSearchingCollaborators" class="search-loading">
+            <v-progress-circular indeterminate size="20" width="2" />
+            <span class="ml-2">Buscando...</span>
+          </div>
+
+          <div v-else-if="collaboratorSearchResults.length > 0" class="search-results">
+            <div
+              v-for="user in collaboratorSearchResults"
+              :key="user.id"
+              class="user-result"
+              @click="inviteCollaborator(user.id)"
+            >
+              <div class="user-avatar-small" :class="{ 'has-image': user.avatarUrl }">
+                <img
+                  v-if="user.avatarUrl"
+                  alt="Avatar"
+                  class="avatar-img"
+                  referrerpolicy="no-referrer"
+                  :src="user.avatarUrl"
+                  @error="($event.target as HTMLImageElement).style.display = 'none'"
+                >
+                <span v-else class="avatar-initials">{{ user.name.charAt(0).toUpperCase() }}</span>
+              </div>
+              <div class="user-info">
+                <span class="user-name">{{ user.name }}</span>
+                <span class="user-email">{{ user.email }}</span>
+                <span v-if="user.specialization" class="user-spec">{{ user.specialization }}</span>
+              </div>
+              <v-icon class="add-icon" color="primary" size="20">mdi-plus-circle-outline</v-icon>
+            </div>
+          </div>
+
+          <div v-else-if="collaboratorSearch.length >= 2" class="no-results">
+            <v-icon color="grey" size="32">mdi-account-search-outline</v-icon>
+            <p>Nenhum usuário encontrado</p>
+          </div>
+
+          <div v-else class="search-hint">
+            <p>Digite pelo menos 2 caracteres para buscar</p>
+          </div>
+        </v-card-text>
+
+        <v-card-actions v-if="isInvitingCollaborator">
+          <v-spacer />
+          <v-progress-circular indeterminate size="24" width="2" />
+          <span class="ml-2">Adicionando...</span>
+          <v-spacer />
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -1103,6 +951,28 @@
       </div>
     </v-dialog>
 
+    <!-- Empty Trash Confirmation Dialog - Apple-like -->
+    <v-dialog v-model="showEmptyTrashConfirm" max-width="360">
+      <div class="apple-alert-dialog">
+        <div class="alert-icon">
+          <v-icon color="error" size="32">mdi-delete-sweep</v-icon>
+        </div>
+        <h3 class="alert-title">Limpar Lixeira?</h3>
+        <p class="alert-message">
+          <strong>{{ trashCount }}</strong> {{ trashCount === 1 ? 'caso será excluído' : 'casos serão excluídos' }} permanentemente. Esta ação não pode ser desfeita.
+        </p>
+        <div class="alert-actions">
+          <button class="alert-btn cancel" @click="showEmptyTrashConfirm = false">
+            Cancelar
+          </button>
+          <button class="alert-btn destructive" :disabled="isEmptyingTrash" @click="emptyTrash">
+            <v-progress-circular v-if="isEmptyingTrash" indeterminate size="14" width="2" />
+            <span v-else>Limpar Tudo</span>
+          </button>
+        </div>
+      </div>
+    </v-dialog>
+
     <!-- Add Slides Dialog -->
     <v-dialog v-model="showAddSlidesDialog" max-width="500" persistent>
       <v-card>
@@ -1210,6 +1080,7 @@
   import { casesApi } from '@/api/cases'
   import { type UploadController, uploadFileToEdge, uploadFileToS3, type UploadProgress } from '@/api/s3'
   import { slidesApi } from '@/api/slides'
+  import { usersApi } from '@/api/users'
   import EdgeStatusBadge from '@/components/EdgeStatusBadge.vue'
   import { type CaseDisplay, useCases } from '@/composables/useCases'
   import { useEdgeStatus } from '@/composables/useEdgeStatus'
@@ -1256,6 +1127,24 @@
   const showDeleteConfirm = ref(false)
   const caseToDelete = ref<CaseDisplay | null>(null)
   const editingField = ref<string | null>(null)
+
+  // Empty trash
+  const showEmptyTrashConfirm = ref(false)
+  const isEmptyingTrash = ref(false)
+
+  // Invite collaborator dialog
+  const showInviteCollaboratorDialog = ref(false)
+  const inviteCollaboratorCase = ref<CaseDisplay | null>(null)
+  const collaboratorSearch = ref('')
+  const collaboratorSearchResults = ref<Array<{
+    id: string
+    email: string
+    name: string
+    avatarUrl: string | null
+    specialization: string | null
+  }>>([])
+  const isSearchingCollaborators = ref(false)
+  const isInvitingCollaborator = ref(false)
 
   // Report download state
   const downloadingReport = ref<string | null>(null)
@@ -1461,6 +1350,9 @@
       count: cases.value.filter(c => c.location === 'trash').length,
     },
   ])
+
+  // Trash count for empty trash button
+  const trashCount = computed(() => cases.value.filter(c => c.location === 'trash').length)
 
   // Notifications from API (invitations are now notifications with type 'invitation')
   const pendingInvitations = computed(() => notificationsStore.invitations.value)
@@ -1798,24 +1690,43 @@
     progress: number
     stageLabel: string
   } {
-    // Check edge processing status first - only for active processing
+    // Check edge processing status first
     const edgeStatus = getCaseProcessingStatus(caseId)
-    if (edgeStatus && (edgeStatus.status === 'uploading' || edgeStatus.status === 'queued' || edgeStatus.status === 'processing')) {
-      const stageLabels: Record<string, string> = {
-        uploading: 'Enviando arquivo...',
-        queued: 'Na fila...',
-        processing: 'Processando...',
+    if (edgeStatus) {
+      // If Edge reports 'ready', trust it and return ready status immediately
+      // This prevents the overlay from persisting while Cloud syncs
+      if (edgeStatus.status === 'ready') {
+        return {
+          status: 'ready',
+          pendingCount: 0,
+          processingCount: 0,
+          uploadingCount: 0,
+          readyCount: 1,
+          failedCount: 0,
+          totalCount: 1,
+          progress: 100,
+          stageLabel: '',
+        }
       }
-      return {
-        status: 'processing',
-        pendingCount: edgeStatus.status === 'queued' ? 1 : 0,
-        processingCount: edgeStatus.status === 'processing' ? 1 : 0,
-        uploadingCount: edgeStatus.status === 'uploading' ? 1 : 0,
-        readyCount: 0,
-        failedCount: 0,
-        totalCount: 1,
-        progress: edgeStatus.progress,
-        stageLabel: stageLabels[edgeStatus.status] || edgeStatus.message,
+
+      // For active processing states, show processing overlay
+      if (edgeStatus.status === 'uploading' || edgeStatus.status === 'queued' || edgeStatus.status === 'processing') {
+        const stageLabels: Record<string, string> = {
+          uploading: 'Enviando arquivo...',
+          queued: 'Na fila...',
+          processing: 'Processando...',
+        }
+        return {
+          status: 'processing',
+          pendingCount: edgeStatus.status === 'queued' ? 1 : 0,
+          processingCount: edgeStatus.status === 'processing' ? 1 : 0,
+          uploadingCount: edgeStatus.status === 'uploading' ? 1 : 0,
+          readyCount: 0,
+          failedCount: 0,
+          totalCount: 1,
+          progress: edgeStatus.progress,
+          stageLabel: stageLabels[edgeStatus.status] || edgeStatus.message,
+        }
       }
     }
 
@@ -1848,15 +1759,21 @@
       }, 0)
       progress = Math.round(progressSum / processingSlides.length)
 
-      // Determine stage label based on progress
-      if (progress === 0 || pendingCount > 0) {
-        stageLabel = 'Aguardando...'
+      // Determine stage label based on progress and Edge connection
+      if (progress === 0) {
+        // No progress tracked - show appropriate message based on Edge connection
+        if (edgeConnected.value) {
+          stageLabel = 'Processando no Edge...'
+          progress = -1 // Use -1 to indicate indeterminate
+        } else {
+          stageLabel = 'Aguardando conexão...'
+        }
       } else if (progress < 10) {
-        stageLabel = 'Baixando...'
+        stageLabel = 'Iniciando...'
       } else if (progress < 50) {
         stageLabel = 'Convertendo...'
       } else if (progress < 95) {
-        stageLabel = 'Enviando tiles...'
+        stageLabel = 'Gerando tiles...'
       } else {
         stageLabel = 'Finalizando...'
       }
@@ -1877,7 +1794,26 @@
 
   // Fetch progress for all processing slides
   async function fetchSlidesProgress () {
-    for (const [caseId, slides] of caseSlides.value.entries()) {
+    // When Edge is connected, skip Cloud progress polling entirely
+    // Progress is tracked via Edge processing tracker + slide status refresh
+    if (edgeConnected.value) {
+      for (const [caseId, slides] of caseSlides.value.entries()) {
+        const edgeStatus = getCaseProcessingStatus(caseId)
+        if (edgeStatus) {
+          // Update slide progress from Edge status
+          for (const slide of slides) {
+            if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending' || slide.processingStatus === 'uploading') {
+              slideProgress.value.set(slide.id, edgeStatus.progress)
+            }
+          }
+        }
+        // If no active edge status, just wait for slide status to update via fetchAllCasesSlides
+      }
+      return
+    }
+
+    // Cloud-only mode: poll Cloud progress endpoint
+    for (const [, slides] of caseSlides.value.entries()) {
       for (const slide of slides) {
         if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending' || slide.processingStatus === 'uploading') {
           try {
@@ -1889,8 +1825,11 @@
               slide.processingStatus = progressData.status as ProcessingStatus
             }
           } catch (error: any) {
-            // If slide not found (404), mark as failed to stop polling
-            if (error?.status === 404 || error?.message?.includes('não encontrado')) {
+            // If 404, the Cloud backend doesn't have progress endpoint
+            if (error?.status === 404 || error?.message?.includes('Not Found')) {
+              console.debug('[Dashboard] Cloud progress endpoint not available for slide:', slide.id)
+            } else if (error?.message?.includes('não encontrado')) {
+              // Slide was actually deleted - mark as failed
               slide.processingStatus = 'failed'
               slideProgress.value.delete(slide.id)
             } else {
@@ -1908,10 +1847,40 @@
 
     processingPollingInterval.value = setInterval(async () => {
       if (hasProcessingSlides()) {
+        // Track which slides were processing before fetch
+        const processingBefore = new Set<string>()
+        for (const slides of caseSlides.value.values()) {
+          for (const slide of slides) {
+            if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending') {
+              processingBefore.add(slide.id)
+            }
+          }
+        }
+
         await fetchSlidesProgress()
         await fetchAllCasesSlides()
+
+        // Check if any slides that were processing are now ready
+        let anyBecameReady = false
+        for (const slides of caseSlides.value.values()) {
+          for (const slide of slides) {
+            if (processingBefore.has(slide.id) && slide.processingStatus === 'ready') {
+              anyBecameReady = true
+              break
+            }
+          }
+          if (anyBecameReady) break
+        }
+
+        // Refresh cases to get updated thumbnailUrl
+        if (anyBecameReady) {
+          console.log('[Dashboard] Slides became ready, refreshing cases for thumbnails...')
+          await casesStore.fetchCases({ forceRefresh: true })
+        }
       } else {
         stopProcessingPolling()
+        // Final refresh to ensure thumbnails are loaded
+        await casesStore.fetchCases({ forceRefresh: true })
       }
     }, POLLING_INTERVAL)
   }
@@ -1983,11 +1952,10 @@
     return info.status === 'processing' || info.status === 'uploading'
   }
 
-  // Handle thumbnail load error (v-img emits the src string or undefined)
-  function handleThumbnailError (_src: string | undefined) {
-    // v-img handles the error display automatically with placeholder slot
+  // Handle thumbnail load error
+  function handleThumbnailError () {
+    // Thumbnail error handling is done in CaseCard
     // This is just for any additional error handling if needed
-    console.warn('[Dashboard] Failed to load thumbnail:', _src)
   }
 
   function closeProfile () {
@@ -2254,20 +2222,71 @@
           edgeProcessingFiles.value.set(filename, {
             filename,
             caseId,
-            status: data.status,
+            status: data.previewPublished ? 'ready' : data.status,
             message: data.message,
             progress: data.progress,
             slideId: data.slideId,
           })
 
-          // Stop polling when ready or failed
-          if (data.status === 'ready' || data.status === 'failed') {
+          // Stop polling when preview is published or failed
+          // previewPublished means the preview is uploaded to Wasabi and event sent to Cloud
+          if (data.previewPublished || data.status === 'failed') {
             clearInterval(pollInterval)
 
             // Refresh cases to update the card
-            if (data.status === 'ready') {
+            if (data.previewPublished) {
+              // Wait for Cloud to receive and process the PreviewPublished event from Edge sync
+              // Edge sync interval is 2s, plus Cloud processing time
+              // Retry up to 10 times with 2s delay (total ~20s max wait)
+              const refreshWithRetry = async (retries = 10, delay = 2000) => {
+                console.log(`[Dashboard] Waiting for Cloud to sync preview for ${filename}...`)
+
+                for (let i = 0; i < retries; i++) {
+                  await new Promise(resolve => setTimeout(resolve, delay))
+
+                  // Refresh cases from Cloud
+                  await casesStore.fetchCases({ forceRefresh: true })
+
+                  // Check if thumbnail is now available
+                  const updatedCase = casesStore.cases.value.find(c => c.id === caseId)
+                  if (updatedCase?.thumbnailUrl) {
+                    console.log(`[Dashboard] Thumbnail available after ${i + 1} refresh(es) (${(i + 1) * delay / 1000}s)`)
+                    return true
+                  }
+
+                  // Also check if slides show as ready
+                  await fetchAllCasesSlides()
+                  const slides = caseSlides.value.get(caseId) || []
+                  const readySlides = slides.filter(s => s.processingStatus === 'ready')
+                  console.log(`[Dashboard] Retry ${i + 1}/${retries}: ${readySlides.length}/${slides.length} slides ready, thumbnail: ${updatedCase?.thumbnailUrl ? 'yes' : 'no'}`)
+                }
+                console.log(`[Dashboard] Thumbnail still not available after ${retries} retries`)
+                return false
+              }
+
+              const success = await refreshWithRetry()
+
+              // Force local slide status to ready (in case Cloud sync is slow)
+              const localSlides = caseSlides.value.get(caseId) || []
+              for (const slide of localSlides) {
+                if (slide.processingStatus !== 'ready' && slide.processingStatus !== 'failed') {
+                  console.log(`[Dashboard] Forcing slide ${slide.id} status to ready (Edge reported previewPublished)`)
+                  slide.processingStatus = 'ready'
+                }
+              }
+
+              // Clear edge processing tracker to remove overlay
+              edgeProcessingFiles.value.delete(filename)
+
+              // Final refresh to ensure slide status is updated
               await casesStore.fetchCases({ forceRefresh: true })
-              showSuccessMessage(`Lâmina ${filename} processada com sucesso!`)
+              await fetchAllCasesSlides()
+
+              if (success) {
+                showSuccessMessage(`Lâmina ${filename} processada com sucesso!`)
+              } else {
+                showSuccessMessage(`Lâmina ${filename} processada. Atualize a página se o thumbnail não aparecer.`)
+              }
             }
 
             // Remove from tracking after a delay
@@ -2497,20 +2516,37 @@
     router.push(`/viewer?caseId=${caseItem.id}`)
   }
 
-  // Generate thumbnail URL for a case (uses first slide's thumbnail)
-  const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://api.supernavi.app') + '/api'
-  function getThumbnailUrl (caseItem: CaseDisplay): string | null {
-    if (!caseItem.thumbnailUrl) return null
-    // Get auth token for the thumbnail request (passed as query param for img src)
-    const token = localStorage.getItem('supernavi_token')
-    if (!token) return null
-    // Use cached slides to get the first slide with a thumbnail
-    const slides = caseSlides.value.get(caseItem.id) || []
-    const slideWithThumb = slides.find(s => s.thumbnailUrl)
-    if (slideWithThumb) {
-      return `${API_BASE_URL}/slides/${slideWithThumb.id}/thumbnail?token=${encodeURIComponent(token)}`
+  // API URLs
+  const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.supernavi.app'
+  const API_BASE_URL = `${CLOUD_BASE_URL}/api`
+
+  // Generate thumbnail URL for a case (uses Cloud API's preview endpoint)
+  // Uses relative URLs to go through Vite proxy in development
+  function getThumbnailUrls (caseId: string): string[] {
+    // Get all thumbnail URLs from the case's slides
+    const slides = caseSlides.value.get(caseId) || []
+    const urls: string[] = []
+
+    for (const slide of slides) {
+      // Use thumbnailUrl if available, otherwise construct from slide ID
+      // Use relative paths to go through Vite proxy (avoids CORS issues in dev)
+      if (slide.thumbnailUrl) {
+        urls.push(slide.thumbnailUrl)
+      } else if (slide.id) {
+        // Construct thumbnail URL from slide ID
+        urls.push(`/preview/${slide.id}/thumb.jpg`)
+      }
     }
-    return null
+
+    // If no slide thumbnails, try case thumbnail as fallback
+    if (urls.length === 0) {
+      const caseItem = casesStore.cases.value.find(c => c.id === caseId)
+      if (caseItem?.thumbnailUrl) {
+        urls.push(caseItem.thumbnailUrl)
+      }
+    }
+
+    return urls
   }
 
   function openCollaboration (collab: any) {
@@ -2637,6 +2673,104 @@
     caseToDelete.value = null
   }
 
+  // Empty trash function
+  async function emptyTrash () {
+    const trashCases = cases.value.filter(c => c.location === 'trash')
+    if (trashCases.length === 0) {
+      showEmptyTrashConfirm.value = false
+      return
+    }
+
+    isEmptyingTrash.value = true
+    console.log(`[Dashboard] Limpando lixeira: ${trashCases.length} casos`)
+
+    let successCount = 0
+    let failCount = 0
+
+    for (const caseItem of trashCases) {
+      try {
+        const success = await casesStore.deleteCase(caseItem.id)
+        if (success) {
+          successCount++
+        } else {
+          failCount++
+        }
+      } catch (error) {
+        console.error(`[Dashboard] Erro ao excluir caso ${caseItem.caseNumber}:`, error)
+        failCount++
+      }
+    }
+
+    isEmptyingTrash.value = false
+    showEmptyTrashConfirm.value = false
+
+    if (failCount === 0) {
+      showSuccessMessage(`Lixeira limpa! ${successCount} ${successCount === 1 ? 'caso excluído' : 'casos excluídos'}.`)
+    } else {
+      showSuccessMessage(`${successCount} casos excluídos, ${failCount} falharam.`)
+    }
+
+    console.log(`[Dashboard] Lixeira limpa: ${successCount} excluídos, ${failCount} falhas`)
+  }
+
+  // Invite collaborator functions
+  function openInviteCollaboratorDialog (caseItem: CaseDisplay) {
+    inviteCollaboratorCase.value = caseItem
+    collaboratorSearch.value = ''
+    collaboratorSearchResults.value = []
+    showInviteCollaboratorDialog.value = true
+  }
+
+  function closeInviteCollaboratorDialog () {
+    showInviteCollaboratorDialog.value = false
+    inviteCollaboratorCase.value = null
+    collaboratorSearch.value = ''
+    collaboratorSearchResults.value = []
+  }
+
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  async function searchCollaborators () {
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+    }
+
+    const query = collaboratorSearch.value.trim()
+    if (query.length < 2) {
+      collaboratorSearchResults.value = []
+      return
+    }
+
+    searchDebounceTimer = setTimeout(async () => {
+      isSearchingCollaborators.value = true
+      try {
+        collaboratorSearchResults.value = await usersApi.search(query)
+      } catch (err) {
+        console.error('[Dashboard] Erro ao buscar colaboradores:', err)
+        collaboratorSearchResults.value = []
+      } finally {
+        isSearchingCollaborators.value = false
+      }
+    }, 300)
+  }
+
+  async function inviteCollaborator (userId: string) {
+    if (!inviteCollaboratorCase.value) return
+
+    isInvitingCollaborator.value = true
+    try {
+      await casesApi.addCollaborator(inviteCollaboratorCase.value.id, userId, 'collaborator')
+      console.log('[Dashboard] Colaborador adicionado com sucesso')
+      closeInviteCollaboratorDialog()
+      // Refresh cases to show updated collaborators
+      await casesStore.fetchCases()
+    } catch (err) {
+      console.error('[Dashboard] Erro ao adicionar colaborador:', err)
+    } finally {
+      isInvitingCollaborator.value = false
+    }
+  }
+
   onMounted(async () => {
     // Initialize auth from storage and validate token
     const isValid = await authStore.initFromStorage()
@@ -2701,7 +2835,10 @@ $color-primary: #007AFF;
 $color-accent: #34C759;
 
 .dashboard {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   background: rgb(var(--v-theme-background));
 }
 
@@ -2937,17 +3074,23 @@ $color-accent: #34C759;
 
 // Main
 .dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   max-width: 960px;
+  width: 100%;
   margin: 0 auto;
-  padding: 24px 24px 40px;
+  padding: 24px 24px 16px;
+  overflow: hidden;
 }
 
 // Quick Actions - Compact Apple-like bar
 .quick-actions {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   padding: 12px 16px;
   background: rgba(var(--v-theme-surface), 0.6);
   border: 1px solid rgba(var(--v-border-color), 0.08);
@@ -3142,6 +3285,35 @@ $color-accent: #34C759;
 }
 
 // Filter Button - Apple-style
+.empty-trash-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: rgba(var(--v-theme-error), 0.1);
+  border: 1px solid rgba(var(--v-theme-error), 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-error));
+
+  :deep(.v-icon) {
+    color: rgb(var(--v-theme-error)) !important;
+  }
+
+  &:hover {
+    background: rgba(var(--v-theme-error), 0.15);
+    border-color: rgba(var(--v-theme-error), 0.3);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
 .filter-btn {
   display: flex;
   align-items: center;
@@ -3403,16 +3575,21 @@ $color-accent: #34C759;
 
 // Cases Section
 .cases-section {
-  margin-bottom: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; // Important for flex children to respect overflow
+  overflow: hidden;
 }
 
 // Cases Toolbar - Clean Apple-like
 .cases-toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .toolbar-actions {
@@ -3682,10 +3859,26 @@ $color-accent: #34C759;
 }
 
 // Cases Grid - Apple-like layout
+.cases-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+
+  // Hide scrollbar but keep scroll functionality
+  scrollbar-width: none; // Firefox
+  -ms-overflow-style: none; // IE/Edge
+
+  &::-webkit-scrollbar {
+    display: none; // Chrome/Safari
+  }
+}
+
 .cases-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+  align-content: start;
+  padding-bottom: 8px;
 
   @media (max-width: 1200px) {
     grid-template-columns: repeat(2, 1fr);
@@ -3699,12 +3892,14 @@ $color-accent: #34C759;
 
 // Pagination - Apple-like minimal
 .pagination {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  margin-top: 32px;
-  padding-top: 24px;
+  padding: 16px 0 8px;
+  border-top: 1px solid rgba(var(--v-border-color), 0.08);
+  background: rgb(var(--v-theme-background));
 }
 
 .pagination-info {
@@ -4526,6 +4721,130 @@ $color-accent: #34C759;
 
   .inline-edit {
     flex: 1;
+  }
+}
+
+// Invite Collaborator Dialog
+.invite-collaborator-dialog {
+  .case-info {
+    font-size: 0.875rem;
+    color: rgb(var(--v-theme-on-surface-variant));
+    display: flex;
+    align-items: center;
+  }
+
+  .search-loading,
+  .no-results,
+  .search-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 8px;
+    color: rgb(var(--v-theme-on-surface-variant));
+
+    p {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+  }
+
+  .search-loading {
+    flex-direction: row;
+  }
+
+  .search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .user-result {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: rgba(var(--v-theme-on-surface), 0.04);
+
+      .add-icon {
+        opacity: 1;
+      }
+    }
+  }
+
+  .user-avatar-small {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgb(var(--v-theme-secondary)) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+
+    &.has-image {
+      background: transparent;
+    }
+
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .avatar-initials {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: white;
+    }
+  }
+
+  .user-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .user-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgb(var(--v-theme-on-surface));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-email {
+    font-size: 0.75rem;
+    color: rgb(var(--v-theme-on-surface-variant));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-spec {
+    font-size: 0.7rem;
+    color: rgb(var(--v-theme-primary));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .add-icon {
+    opacity: 0.5;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
   }
 }
 

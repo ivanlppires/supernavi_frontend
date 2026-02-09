@@ -77,6 +77,7 @@ export interface Case {
   status: CaseStatus
   location: CaseLocation
   ownerId: string
+  isOwner: boolean
   description: string | null
   clinicalNotes: string | null
   createdAt: string
@@ -85,7 +86,7 @@ export interface Case {
 
 export interface CaseWithDetails extends Case {
   owner?: User
-  collaborators?: CaseCollaborator[]
+  collaborators?: CaseCollaboratorSummary[]
   slidesCount?: number
   thumbnailUrl?: string | null
 }
@@ -95,6 +96,12 @@ export interface CaseCollaborator {
   role: 'viewer' | 'collaborator'
   joinedAt: string
   user?: User
+}
+
+export interface CaseCollaboratorSummary {
+  id: string
+  name: string
+  avatarUrl: string | null
 }
 
 export interface CreateCaseRequest {

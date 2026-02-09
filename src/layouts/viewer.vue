@@ -285,9 +285,9 @@
       </v-menu>
     </div>
 
-    <!-- Right Panel (Desktop) -->
+    <!-- Right Panel (Desktop) - hidden in read-only mode -->
     <v-navigation-drawer
-      v-if="!mobile"
+      v-if="!mobile && !isReadOnly.value"
       v-model="rightPanel"
       class="right-panel"
       :class="{ 'is-resizing': isResizingPanel }"
@@ -562,116 +562,152 @@
                 <div
                   v-for="message in selectedAnnotation.messages"
                   :key="message.id"
-                  class="message-wrapper"
-                  :class="{ 'message-own': message.authorId === currentUser.id, 'message-ai': message.authorId === 'ai-pathologist' }"
+                  class="message-item"
+                  :class="{ 'message-own': message.authorId === currentUser.id }"
                 >
-
                   <!-- System Message -->
                   <div v-if="message.type === 'system'" class="system-message">
                     <v-icon class="mr-1" size="14">mdi-information</v-icon>
                     {{ message.content }}
                   </div>
 
-                  <!-- Regular or AI Message -->
-                  <div
-                    v-else
-                    class="message-bubble"
-                    :class="{
-                      'ai-bubble': message.authorId === 'ai-pathologist',
-                      'own-bubble': message.authorId === currentUser.id
-                    }"
-                  >
-                    <!-- Author Header (for non-own messages) -->
-                    <div v-if="message.authorId !== currentUser.id" class="message-author">
-                      <v-avatar
-                        class="mr-2"
-                        :color="message.authorId === 'ai-pathologist' ? 'secondary' : 'primary'"
-                        size="24"
+                  <!-- Regular Message -->
+                  <template v-else>
+                    <!-- Avatar -->
+                    <v-avatar
+                      class="message-avatar"
+                      color="primary"
+                      size="36"
+                    >
+                      <img
+                        v-if="getParticipant(message.authorId)?.avatar"
+                        :alt="getParticipant(message.authorId)?.name"
+                        referrerpolicy="no-referrer"
+                        :src="getParticipant(message.authorId)?.avatar"
+                        style="width: 100%; height: 100%; object-fit: cover;"
                       >
-                        <v-icon v-if="message.authorId === 'ai-pathologist'" size="14">mdi-robot</v-icon>
-                        <span v-else class="text-caption">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
-                      </v-avatar>
-                      <span class="author-name">{{ getParticipant(message.authorId)?.name }}</span>
-                      <span v-if="message.authorId === 'ai-pathologist'" class="ai-badge">IA</span>
-                    </div>
+                      <span v-else class="avatar-letter">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
+                    </v-avatar>
 
                     <!-- Message Content -->
-                    <div class="message-content">{{ message.content }}</div>
-
-                    <!-- AI Analysis Card -->
-                    <div
-                      v-if="(message.type === 'ai-analysis' || message.type === 'ai-suggestion') && message.aiFindings"
-                      class="ai-findings-card"
-                    >
-                      <div v-if="message.aiConfidence" class="confidence-bar">
-                        <div class="d-flex align-center justify-space-between mb-1">
-                          <span class="text-caption">Confiança da análise</span>
-                          <span class="confidence-value">{{ message.aiConfidence }}%</span>
-                        </div>
-                        <v-progress-linear color="secondary" height="4" :model-value="message.aiConfidence" rounded />
+                    <div class="message-body">
+                      <!-- Header: Name + DateTime -->
+                      <div class="message-header">
+                        <span class="message-author-name">Dr. {{ getParticipant(message.authorId)?.name }}</span>
+                        <span class="message-datetime">{{ formatMessageDateTime(message.timestamp) }}</span>
                       </div>
 
-                      <div class="findings-list">
-                        <div v-for="(finding, idx) in message.aiFindings" :key="idx" class="finding-item">
-                          <div class="finding-label">
-                            <v-icon
-                              v-if="finding.severity === 'high'"
-                              class="mr-1"
-                              color="error"
-                              size="12"
-                            >mdi-alert-circle</v-icon>
-                            <v-icon
-                              v-else-if="finding.severity === 'medium'"
-                              class="mr-1"
-                              color="warning"
-                              size="12"
-                            >mdi-alert</v-icon>
-                            {{ finding.label }}
-                          </div>
-                          <div class="finding-value">{{ finding.value }}</div>
+                      <!-- Content -->
+                      <div
+                        v-if="editingMessageId !== message.id"
+                        class="message-text"
+                      >
+                        {{ message.content }}
+                      </div>
+
+                      <!-- Edit Mode -->
+                      <div v-else class="message-edit-container">
+                        <v-textarea
+                          v-model="editingMessageContent"
+                          auto-grow
+                          autofocus
+                          class="message-edit-input"
+                          density="compact"
+                          hide-details
+                          rows="2"
+                          variant="outlined"
+                          @keydown.enter.exact.prevent="saveMessageEdit(message)"
+                          @keydown.escape="cancelMessageEdit"
+                        />
+                        <div class="message-edit-actions">
+                          <v-btn
+                            color="primary"
+                            size="small"
+                            variant="flat"
+                            @click="saveMessageEdit(message)"
+                          >
+                            Salvar
+                          </v-btn>
+                          <v-btn
+                            size="small"
+                            variant="text"
+                            @click="cancelMessageEdit"
+                          >
+                            Cancelar
+                          </v-btn>
                         </div>
                       </div>
+
+                      <!-- Edited indicator -->
+                      <span v-if="message.editedAt" class="message-edited-badge">
+                        (editado)
+                      </span>
                     </div>
 
-                    <!-- Timestamp -->
-                    <div class="message-time">{{ formatTime(message.timestamp) }}</div>
-                  </div>
+                    <!-- Actions Menu (only for own messages) -->
+                    <div v-if="message.authorId === currentUser.id && editingMessageId !== message.id" class="message-actions">
+                      <v-menu location="bottom end" offset="4">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            class="message-menu-btn"
+                            icon
+                            size="x-small"
+                            variant="text"
+                          >
+                            <v-icon size="16">mdi-dots-vertical</v-icon>
+                          </v-btn>
+                        </template>
+                        <v-list class="message-actions-menu" density="compact">
+                          <v-list-item
+                            prepend-icon="mdi-pencil-outline"
+                            title="Editar"
+                            @click="startMessageEdit(message)"
+                          />
+                          <v-list-item
+                            class="text-error"
+                            prepend-icon="mdi-trash-can-outline"
+                            title="Remover"
+                            @click="confirmDeleteMessage(message)"
+                          />
+                        </v-list>
+                      </v-menu>
+                    </div>
+                  </template>
                 </div>
 
-                <!-- AI Typing Indicator -->
-                <div v-if="isSendingMessage" class="message-wrapper message-ai">
-                  <div class="message-bubble ai-bubble typing-bubble">
-                    <div class="message-author">
-                      <v-avatar class="mr-2" color="secondary" size="24">
-                        <v-icon size="14">mdi-robot</v-icon>
-                      </v-avatar>
-                      <span class="author-name">PathAI Assistant</span>
-                      <span class="ai-badge">IA</span>
-                    </div>
-                    <div class="typing-indicator">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
+                <!-- Loading state -->
+                <div v-if="isLoadingMessages" class="messages-empty">
+                  <v-progress-circular color="primary" indeterminate size="32" />
+                  <p class="text-caption text-medium-emphasis mt-2">Carregando mensagens...</p>
+                </div>
+
+                <!-- Empty state -->
+                <div v-else-if="selectedAnnotation.messages.length === 0" class="messages-empty">
+                  <v-icon color="grey-lighten-1" size="40">mdi-message-text-outline</v-icon>
+                  <p class="text-caption text-medium-emphasis mt-2">Nenhuma mensagem ainda</p>
+                  <p class="text-caption text-medium-emphasis">Inicie a discussão sobre esta região</p>
                 </div>
               </div>
             </div>
 
+            <!-- Delete Message Confirmation Dialog -->
+            <v-dialog v-model="showDeleteMessageDialog" max-width="360">
+              <v-card class="delete-message-dialog">
+                <v-card-title class="text-h6">Remover mensagem?</v-card-title>
+                <v-card-text class="text-body-2 text-medium-emphasis">
+                  Esta ação não pode ser desfeita.
+                </v-card-text>
+                <v-card-actions>
+                  <v-spacer />
+                  <v-btn variant="text" @click="showDeleteMessageDialog = false">Cancelar</v-btn>
+                  <v-btn color="error" variant="flat" @click="deleteMessage">Remover</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
+
             <!-- Message Input -->
             <div class="ai-chat-input-container">
-              <v-btn
-                :color="aiAgentEnabled ? 'secondary' : 'default'"
-                icon
-                size="small"
-                :variant="aiAgentEnabled ? 'flat' : 'outlined'"
-                @click="aiAgentEnabled = !aiAgentEnabled"
-              >
-                <v-icon>{{ aiAgentEnabled ? 'mdi-robot' : 'mdi-robot-off' }}</v-icon>
-                <v-tooltip activator="parent" location="top">
-                  {{ aiAgentEnabled ? 'IA participando da discussão' : 'IA desativada (clique para ativar)' }}
-                </v-tooltip>
-              </v-btn>
               <v-textarea
                 v-model="newMessage"
                 auto-grow
@@ -679,7 +715,7 @@
                 density="compact"
                 hide-details
                 max-rows="4"
-                :placeholder="aiAgentEnabled ? 'Digite sua observação...' : 'Discussão sem IA...'"
+                placeholder="Digite sua observação..."
                 rows="1"
                 variant="outlined"
                 @keydown.enter.exact.prevent="sendMessage"
@@ -700,159 +736,15 @@
 
         <!-- AI Case Discussion Section -->
         <v-tabs-window-item value="ai">
-          <div class="ai-chat-panel">
-            <!-- AI Chat Header -->
-            <div class="ai-chat-header">
-              <div class="d-flex align-center ga-3 px-4 py-3">
-                <v-avatar color="secondary" size="40">
-                  <v-icon size="24">mdi-robot</v-icon>
-                </v-avatar>
-                <div class="flex-grow-1">
-                  <div class="text-subtitle-2 font-weight-medium">Assistente de Patologia</div>
-                  <div class="text-caption text-medium-emphasis d-flex align-center ga-1">
-                    <span class="ai-status-dot" />
-                    Análise geral do caso
-                  </div>
-                </div>
-                <v-btn icon size="small" variant="text">
-                  <v-icon>mdi-refresh</v-icon>
-                  <v-tooltip activator="parent" location="bottom">Nova análise</v-tooltip>
-                </v-btn>
-              </div>
-
-              <!-- Case Context Bar -->
-              <div class="case-context-bar">
-                <div class="context-item">
-                  <v-icon size="14">mdi-folder-open</v-icon>
-                  <span>{{ viewerControls.state.value.caseName || 'Caso atual' }}</span>
-                </div>
-                <div class="context-divider" />
-                <div class="context-item">
-                  <v-icon size="14">mdi-image-outline</v-icon>
-                  <span>{{ currentSlideName }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- AI Messages Container -->
-            <div class="ai-messages-container">
-              <div class="ai-messages-scroll">
-                <!-- Welcome/Initial Analysis Message -->
-                <div v-if="aiCaseMessages.length === 0" class="ai-welcome-message">
-                  <div class="welcome-icon">
-                    <v-icon color="secondary" size="48">mdi-brain</v-icon>
-                  </div>
-                  <h3 class="text-subtitle-1 font-weight-medium mb-2">Análise do Caso</h3>
-                  <p class="text-caption text-medium-emphasis text-center mb-4">
-                    Inicie uma conversa para discutir o caso como um todo.
-                    A IA analisará a lâmina completa e fornecerá insights diagnósticos.
-                  </p>
-                  <v-btn
-                    color="secondary"
-                    prepend-icon="mdi-play"
-                    variant="tonal"
-                    @click="startAICaseAnalysis"
-                  >
-                    Iniciar Análise
-                  </v-btn>
-                </div>
-
-                <!-- Messages List -->
-                <div
-                  v-for="message in aiCaseMessages"
-                  :key="message.id"
-                  class="ai-case-message-wrapper"
-                  :class="{ 'message-own': message.authorId === currentUser.id }"
-                >
-                  <!-- AI Message -->
-                  <div
-                    v-if="message.authorId === 'ai-pathologist'"
-                    class="ai-case-message ai-message"
-                  >
-                    <div class="message-header">
-                      <v-avatar color="secondary" size="28">
-                        <v-icon size="16">mdi-robot</v-icon>
-                      </v-avatar>
-                      <span class="author-name">PathAI Assistant</span>
-                      <span class="ai-badge-minimal">IA</span>
-                    </div>
-                    <div class="message-body">{{ message.content }}</div>
-
-                    <!-- AI Findings Card -->
-                    <div v-if="message.aiFindings && message.aiFindings.length > 0" class="ai-case-findings">
-                      <div v-if="message.aiConfidence" class="confidence-indicator">
-                        <span class="confidence-label">Confiança</span>
-                        <div class="confidence-bar-container">
-                          <div class="confidence-bar-fill" :style="{ width: message.aiConfidence + '%' }" />
-                        </div>
-                        <span class="confidence-value">{{ message.aiConfidence }}%</span>
-                      </div>
-                      <div class="findings-grid">
-                        <div v-for="(finding, idx) in message.aiFindings" :key="idx" class="finding-item-minimal">
-                          <div class="finding-label-minimal">
-                            <v-icon v-if="finding.severity === 'high'" color="error" size="12">mdi-alert-circle</v-icon>
-                            <v-icon v-else-if="finding.severity === 'medium'" color="warning" size="12">mdi-alert</v-icon>
-                            {{ finding.label }}
-                          </div>
-                          <div class="finding-value-minimal">{{ finding.value }}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="message-timestamp">{{ formatTime(message.timestamp) }}</div>
-                  </div>
-
-                  <!-- User Message -->
-                  <div v-else class="ai-case-message user-message">
-                    <div class="message-body">{{ message.content }}</div>
-                    <div class="message-timestamp">{{ formatTime(message.timestamp) }}</div>
-                  </div>
-                </div>
-
-                <!-- AI Typing Indicator -->
-                <div v-if="isAICaseTyping" class="ai-case-message-wrapper">
-                  <div class="ai-case-message ai-message typing">
-                    <div class="message-header">
-                      <v-avatar color="secondary" size="28">
-                        <v-icon size="16">mdi-robot</v-icon>
-                      </v-avatar>
-                      <span class="author-name">PathAI Assistant</span>
-                    </div>
-                    <div class="ai-typing-indicator">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- AI Chat Input -->
-            <div class="ai-chat-input-container">
-              <v-textarea
-                v-model="aiCaseNewMessage"
-                auto-grow
-                class="ai-chat-input"
-                density="compact"
-                hide-details
-                max-rows="4"
-                placeholder="Pergunte sobre o caso..."
-                rows="1"
-                variant="outlined"
-                @keydown.enter.exact.prevent="sendAICaseMessage"
-              />
-              <v-btn
-                class="ai-send-btn"
-                color="secondary"
-                :disabled="!aiCaseNewMessage.trim()"
-                icon
-                :loading="isAICaseTyping"
-                @click="sendAICaseMessage"
-              >
-                <v-icon>mdi-send</v-icon>
-              </v-btn>
-            </div>
+          <div class="ai-coming-soon">
+            <v-icon color="secondary" size="64">mdi-robot-outline</v-icon>
+            <h3 class="text-h6 font-weight-medium mt-4 mb-2">Assistente de IA</h3>
+            <p class="text-body-2 text-medium-emphasis text-center" style="max-width: 280px;">
+              Em breve você poderá conversar com a IA para auxiliar na análise das lâminas.
+            </p>
+            <v-chip class="mt-4" color="secondary" variant="tonal">
+              Em breve
+            </v-chip>
           </div>
         </v-tabs-window-item>
 
@@ -1189,35 +1081,31 @@
                   </div>
                 </div>
                 <div class="mobile-messages">
-                  <div
-                    v-for="message in selectedAnnotation.messages.slice(-5)"
-                    :key="message.id"
-                    class="mobile-message"
-                    :class="{ 'own': message.authorId === currentUser.id, 'ai': message.authorId === 'ai-pathologist' }"
-                  >
-                    <div v-if="message.authorId !== currentUser.id" class="mobile-message-author">
-                      <v-avatar
-                        :color="message.authorId === 'ai-pathologist' ? 'secondary' : 'primary'"
-                        size="20"
-                      >
-                        <v-icon v-if="message.authorId === 'ai-pathologist'" size="12">mdi-robot</v-icon>
-                        <span v-else class="text-caption">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
-                      </v-avatar>
-                      <span class="mobile-author-name">{{ getParticipant(message.authorId)?.name.split(' ')[0] }}</span>
-                    </div>
-                    <span class="message-text">{{ message.content }}</span>
+                  <div v-if="isLoadingMessages" class="mobile-messages-loading">
+                    <v-progress-circular color="primary" indeterminate size="24" />
                   </div>
+                  <template v-else>
+                    <div
+                      v-for="message in selectedAnnotation.messages.slice(-5)"
+                      :key="message.id"
+                      class="mobile-message"
+                      :class="{ 'own': message.authorId === currentUser.id, 'ai': message.authorId === 'ai-pathologist' }"
+                    >
+                      <div v-if="message.authorId !== currentUser.id" class="mobile-message-author">
+                        <v-avatar
+                          :color="message.authorId === 'ai-pathologist' ? 'secondary' : 'primary'"
+                          size="20"
+                        >
+                          <v-icon v-if="message.authorId === 'ai-pathologist'" size="12">mdi-robot</v-icon>
+                          <span v-else class="text-caption">{{ getParticipant(message.authorId)?.name.charAt(0) }}</span>
+                        </v-avatar>
+                        <span class="mobile-author-name">Dr. {{ getParticipant(message.authorId)?.name.split(' ')[0] }}</span>
+                      </div>
+                      <span class="message-text">{{ message.content }}</span>
+                    </div>
+                  </template>
                 </div>
                 <div class="mobile-input-row">
-                  <v-btn
-                    :color="aiAgentEnabled ? 'secondary' : 'default'"
-                    icon
-                    size="x-small"
-                    :variant="aiAgentEnabled ? 'flat' : 'outlined'"
-                    @click="aiAgentEnabled = !aiAgentEnabled"
-                  >
-                    <v-icon size="16">{{ aiAgentEnabled ? 'mdi-robot' : 'mdi-robot-off' }}</v-icon>
-                  </v-btn>
                   <v-text-field
                     v-model="newMessage"
                     class="mobile-message-input"
@@ -1236,46 +1124,12 @@
 
             <!-- Mobile AI Chat -->
             <v-tabs-window-item value="ai">
-              <div class="mobile-ai-chat">
-                <div v-if="aiCaseMessages.length === 0" class="mobile-empty-state">
-                  <v-icon color="secondary" size="40">mdi-brain</v-icon>
-                  <p class="text-caption text-medium-emphasis mt-2">Análise do caso</p>
-                  <v-btn
-                    class="mt-2"
-                    color="secondary"
-                    size="small"
-                    variant="tonal"
-                    @click="startAICaseAnalysis"
-                  >
-                    Iniciar
-                  </v-btn>
-                </div>
-                <template v-else>
-                  <div class="mobile-ai-messages">
-                    <div
-                      v-for="message in aiCaseMessages.slice(-5)"
-                      :key="message.id"
-                      class="mobile-message"
-                      :class="{ 'own': message.authorId === currentUser.id, 'ai': message.authorId === 'ai-pathologist' }"
-                    >
-                      <span class="message-text">{{ message.content }}</span>
-                    </div>
-                  </div>
-                  <div class="mobile-input-row">
-                    <v-text-field
-                      v-model="aiCaseNewMessage"
-                      class="mobile-message-input"
-                      density="compact"
-                      hide-details
-                      placeholder="Pergunte sobre o caso..."
-                      variant="outlined"
-                      @keydown.enter="sendAICaseMessage"
-                    />
-                    <v-btn color="secondary" icon size="small" @click="sendAICaseMessage">
-                      <v-icon size="18">mdi-send</v-icon>
-                    </v-btn>
-                  </div>
-                </template>
+              <div class="mobile-ai-coming-soon">
+                <v-icon color="secondary" size="40">mdi-robot-outline</v-icon>
+                <p class="text-caption text-medium-emphasis mt-2">Assistente de IA</p>
+                <v-chip class="mt-2" color="secondary" size="small" variant="tonal">
+                  Em breve
+                </v-chip>
               </div>
             </v-tabs-window-item>
 
@@ -1474,33 +1328,35 @@
             <v-icon>mdi-fit-to-screen</v-icon>
             <span class="text-caption">Ajustar</span>
           </v-btn>
-          <v-btn
-            :color="activeTool === 'roi-rect' ? 'primary' : 'default'"
-            stacked
-            variant="tonal"
-            @click="selectTool('roi-rect'); mobileToolsMenu = false"
-          >
-            <v-icon>mdi-vector-square</v-icon>
-            <span class="text-caption">Retângulo</span>
-          </v-btn>
-          <v-btn
-            :color="activeTool === 'roi-arrow' ? 'primary' : 'default'"
-            stacked
-            variant="tonal"
-            @click="selectTool('roi-arrow'); mobileToolsMenu = false"
-          >
-            <v-icon>mdi-arrow-top-right</v-icon>
-            <span class="text-caption">Seta</span>
-          </v-btn>
-          <v-btn
-            :color="activeTool === 'measure' ? 'primary' : 'default'"
-            stacked
-            variant="tonal"
-            @click="selectTool('measure'); mobileToolsMenu = false"
-          >
-            <v-icon>mdi-ruler</v-icon>
-            <span class="text-caption">Medir</span>
-          </v-btn>
+          <template v-if="!isReadOnly.value">
+            <v-btn
+              :color="activeTool === 'roi-rect' ? 'primary' : 'default'"
+              stacked
+              variant="tonal"
+              @click="selectTool('roi-rect'); mobileToolsMenu = false"
+            >
+              <v-icon>mdi-vector-square</v-icon>
+              <span class="text-caption">Retângulo</span>
+            </v-btn>
+            <v-btn
+              :color="activeTool === 'roi-arrow' ? 'primary' : 'default'"
+              stacked
+              variant="tonal"
+              @click="selectTool('roi-arrow'); mobileToolsMenu = false"
+            >
+              <v-icon>mdi-arrow-top-right</v-icon>
+              <span class="text-caption">Seta</span>
+            </v-btn>
+            <v-btn
+              :color="activeTool === 'measure' ? 'primary' : 'default'"
+              stacked
+              variant="tonal"
+              @click="selectTool('measure'); mobileToolsMenu = false"
+            >
+              <v-icon>mdi-ruler</v-icon>
+              <span class="text-caption">Medir</span>
+            </v-btn>
+          </template>
           <v-btn
             stacked
             variant="tonal"
@@ -1593,47 +1449,49 @@
             </button>
           </div>
 
-          <div class="tool-separator" />
+          <template v-if="!isReadOnly.value">
+            <div class="tool-separator" />
 
-          <!-- ROI Tools -->
-          <div class="tool-item">
-            <button
-              class="studio-btn"
-              :class="{ 'is-active': activeTool === 'roi-rect' }"
-              @click="selectTool('roi-rect')"
-            >
-              <div class="btn-glow" />
-              <v-icon class="btn-icon">mdi-vector-square</v-icon>
-              <div class="btn-tooltip">Retângulo</div>
-            </button>
-          </div>
+            <!-- ROI Tools -->
+            <div class="tool-item">
+              <button
+                class="studio-btn"
+                :class="{ 'is-active': activeTool === 'roi-rect' }"
+                @click="selectTool('roi-rect')"
+              >
+                <div class="btn-glow" />
+                <v-icon class="btn-icon">mdi-vector-square</v-icon>
+                <div class="btn-tooltip">Retângulo</div>
+              </button>
+            </div>
 
-          <div class="tool-item">
-            <button
-              class="studio-btn"
-              :class="{ 'is-active': activeTool === 'roi-arrow' }"
-              @click="selectTool('roi-arrow')"
-            >
-              <div class="btn-glow" />
-              <v-icon class="btn-icon">mdi-arrow-top-right</v-icon>
-              <div class="btn-tooltip">Seta</div>
-            </button>
-          </div>
+            <div class="tool-item">
+              <button
+                class="studio-btn"
+                :class="{ 'is-active': activeTool === 'roi-arrow' }"
+                @click="selectTool('roi-arrow')"
+              >
+                <div class="btn-glow" />
+                <v-icon class="btn-icon">mdi-arrow-top-right</v-icon>
+                <div class="btn-tooltip">Seta</div>
+              </button>
+            </div>
 
-          <div class="tool-separator" />
+            <div class="tool-separator" />
 
-          <!-- Measure Tool -->
-          <div class="tool-item">
-            <button
-              class="studio-btn"
-              :class="{ 'is-active': activeTool === 'measure' }"
-              @click="selectTool('measure')"
-            >
-              <div class="btn-glow" />
-              <v-icon class="btn-icon">mdi-ruler</v-icon>
-              <div class="btn-tooltip">Medir</div>
-            </button>
-          </div>
+            <!-- Measure Tool -->
+            <div class="tool-item">
+              <button
+                class="studio-btn"
+                :class="{ 'is-active': activeTool === 'measure' }"
+                @click="selectTool('measure')"
+              >
+                <div class="btn-glow" />
+                <v-icon class="btn-icon">mdi-ruler</v-icon>
+                <div class="btn-tooltip">Medir</div>
+              </button>
+            </div>
+          </template>
 
           <div class="tool-separator" />
 
@@ -1654,7 +1512,7 @@
 
       <!-- Panel Toggle Button (when closed, Desktop only) -->
       <v-btn
-        v-if="!mobile && !rightPanel && !focusMode"
+        v-if="!mobile && !rightPanel && !focusMode && !isReadOnly.value"
         class="panel-toggle-btn"
         color="primary"
         elevation="4"
@@ -1703,11 +1561,22 @@
       <!-- Floating Status Card (Google Maps style) -->
       <div v-show="!focusMode" class="status-card" :class="{ 'status-card-mobile': mobile }">
         <div class="status-content">
-          <!-- Zoom Info -->
-          <div class="status-item">
+          <!-- Magnification Info -->
+          <div class="status-item" :class="{ 'status-digital-zoom': viewerControls.state.value.isDigitalZoom }">
             <v-icon class="status-icon" size="16">mdi-magnify</v-icon>
-            <span v-if="!mobile" class="status-label">Zoom:</span>
-            <strong class="status-value">{{ viewerControls.state.value.zoomLevel }}x</strong>
+            <span v-if="!mobile" class="status-label">
+              {{ viewerControls.state.value.isDigitalZoom ? 'Digital:' : 'Mag:' }}
+            </span>
+            <strong class="status-value">{{ viewerControls.state.value.magnification }}x</strong>
+            <v-chip
+              v-if="viewerControls.state.value.appMag && !mobile"
+              class="status-native-mag"
+              density="compact"
+              size="x-small"
+              variant="outlined"
+            >
+              {{ viewerControls.state.value.appMag }}x ótico
+            </v-chip>
           </div>
 
           <!-- Escala (Desktop only) -->
@@ -2068,6 +1937,9 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay, useTheme } from 'vuetify'
   import { useViewer } from '@/composables/useViewer'
+  import { annotationsApi } from '@/api/annotations'
+  import type { Annotation as ApiAnnotation, Message as ApiMessage } from '@/api/types'
+  import { useAuthStore } from '@/stores/auth'
 
   const router = useRouter()
   const route = useRoute()
@@ -2088,6 +1960,9 @@
     isLoading: { value: boolean }
   }
   const edgeFirstState = inject<EdgeFirstState | null>('edgeFirstTileSource', null)
+
+  // Read-only mode (magic links: no annotations/drawing)
+  const isReadOnly = inject<{ value: boolean }>('viewerReadOnly', ref(false))
 
   // Theme
   const theme = useTheme()
@@ -2610,6 +2485,7 @@ SuperNavi - Plataforma de Patologia Digital
     authorId: string
     content: string
     timestamp: Date
+    editedAt?: Date
     type: 'text' | 'ai-analysis' | 'ai-suggestion' | 'system'
     aiConfidence?: number
     aiFindings?: Array<{ label: string, value: string, severity?: 'low' | 'medium' | 'high' }>
@@ -2640,18 +2516,20 @@ SuperNavi - Plataforma de Patologia Digital
     isOnline: true,
   }
 
-  // Current User (will come from auth later)
-  const currentUser: Participant = {
-    id: 'user-1',
-    name: 'Dr. Carlos Silva',
+  // Current User from auth store
+  const authStore = useAuthStore()
+  const currentUser = computed<Participant>(() => ({
+    id: authStore.user?.id || 'anonymous',
+    name: authStore.user?.name || 'Usuário',
     role: 'owner',
-    specialty: 'Hepatopatologia',
+    avatar: authStore.user?.avatar,
+    specialty: authStore.user?.specialization || '',
     isOnline: true,
-  }
+  }))
 
-  // Sample Participants
+  // Sample Participants (AI removed - coming soon)
   const sampleParticipants: Participant[] = [
-    currentUser,
+    currentUser.value,
     {
       id: 'user-2',
       name: 'Dra. Ana Costa',
@@ -2666,11 +2544,71 @@ SuperNavi - Plataforma de Patologia Digital
       specialty: 'Citopatologia',
       isOnline: false,
     },
-    aiAgent,
   ]
 
   // Annotations State - loaded from API
   const annotations = ref<Annotation[]>([])
+  const isLoadingAnnotations = ref(false)
+
+  // Convert API annotation to local annotation format
+  function apiToLocalAnnotation (apiAnn: ApiAnnotation): Annotation {
+    // Convert coordinates, converting null to undefined
+    const coordinates: { x: number, y: number, width?: number, height?: number } = {
+      x: apiAnn.coordinates.x,
+      y: apiAnn.coordinates.y,
+    }
+    if (apiAnn.coordinates.width != null) {
+      coordinates.width = apiAnn.coordinates.width
+    }
+    if (apiAnn.coordinates.height != null) {
+      coordinates.height = apiAnn.coordinates.height
+    }
+
+    return {
+      id: apiAnn.id,
+      name: apiAnn.name,
+      type: apiAnn.type as 'rectangle' | 'arrow' | 'freehand',
+      color: apiAnn.color,
+      coordinates,
+      owner: currentUser.value,
+      participants: [currentUser.value],
+      messages: [],
+      status: apiAnn.status.replace('_', '-') as 'open' | 'resolved' | 'pending-review',
+      priority: apiAnn.priority as 'low' | 'normal' | 'high' | 'urgent',
+      unreadCount: 0,
+      createdAt: new Date(apiAnn.createdAt),
+      updatedAt: new Date(apiAnn.updatedAt),
+    }
+  }
+
+  // Load annotations from API for the current slide
+  async function loadAnnotations (slideId: string) {
+    if (!slideId) return
+
+    isLoadingAnnotations.value = true
+    try {
+      const apiAnnotations = await annotationsApi.getBySlide(slideId)
+      annotations.value = apiAnnotations.map(apiToLocalAnnotation)
+      console.log('[Layout] Loaded', annotations.value.length, 'annotations for slide', slideId)
+    } catch (err) {
+      console.error('[Layout] Failed to load annotations:', err)
+    } finally {
+      isLoadingAnnotations.value = false
+    }
+  }
+
+  // Watch for slide changes to load annotations
+  watch(
+    () => activeSlideId.value,
+    (newSlideId) => {
+      if (newSlideId) {
+        loadAnnotations(newSlideId)
+      } else {
+        annotations.value = []
+      }
+    },
+    { immediate: true },
+  )
 
   // Total unread messages (for mobile badge)
   const totalUnread = computed(() => annotations.value.reduce((acc, a) => acc + a.unreadCount, 0))
@@ -2681,7 +2619,73 @@ SuperNavi - Plataforma de Patologia Digital
   // New message input
   const newMessage = ref('')
   const isSendingMessage = ref(false)
-  const aiAgentEnabled = ref(true) // Toggle for AI participation in annotation discussions
+  const isLoadingMessages = ref(false)
+  const aiAgentEnabled = ref(false) // AI participation disabled (coming soon)
+
+  // Message editing
+  const editingMessageId = ref<string | null>(null)
+  const editingMessageContent = ref('')
+  const showDeleteMessageDialog = ref(false)
+  const messageToDelete = ref<Message | null>(null)
+
+  function startMessageEdit (message: Message) {
+    editingMessageId.value = message.id
+    editingMessageContent.value = message.content
+  }
+
+  function cancelMessageEdit () {
+    editingMessageId.value = null
+    editingMessageContent.value = ''
+  }
+
+  function saveMessageEdit (message: Message) {
+    if (!editingMessageContent.value.trim() || !selectedAnnotation.value) return
+
+    const idx = selectedAnnotation.value.messages.findIndex(m => m.id === message.id)
+    if (idx !== -1) {
+      selectedAnnotation.value.messages[idx].content = editingMessageContent.value.trim()
+      selectedAnnotation.value.messages[idx].editedAt = new Date()
+    }
+
+    cancelMessageEdit()
+  }
+
+  function confirmDeleteMessage (message: Message) {
+    messageToDelete.value = message
+    showDeleteMessageDialog.value = true
+  }
+
+  function deleteMessage () {
+    if (!messageToDelete.value || !selectedAnnotation.value) return
+
+    const idx = selectedAnnotation.value.messages.findIndex(m => m.id === messageToDelete.value!.id)
+    if (idx !== -1) {
+      selectedAnnotation.value.messages.splice(idx, 1)
+    }
+
+    showDeleteMessageDialog.value = false
+    messageToDelete.value = null
+  }
+
+  function formatMessageDateTime (date: Date): string {
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24))
+
+    const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+    if (diffDays === 0) {
+      return `Hoje às ${timeStr}`
+    } else if (diffDays === 1) {
+      return `Ontem às ${timeStr}`
+    } else if (diffDays < 7) {
+      const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' })
+      return `${dayName} às ${timeStr}`
+    } else {
+      const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+      return `${dateStr} às ${timeStr}`
+    }
+  }
 
   // ===========================================
   // AI CASE DISCUSSION (Global Slide Analysis)
@@ -2721,7 +2725,7 @@ SuperNavi - Plataforma de Patologia Digital
     // Add user message
     const userMessage: Message = {
       id: `user-case-${Date.now()}`,
-      authorId: currentUser.id,
+      authorId: currentUser.value.id,
       content: aiCaseNewMessage.value.trim(),
       timestamp: new Date(),
       type: 'text',
@@ -2760,16 +2764,26 @@ SuperNavi - Plataforma de Patologia Digital
     }
   }
 
-  function saveAnnotationName () {
+  async function saveAnnotationName () {
     if (selectedAnnotation.value && editingAnnotationName.value.trim()) {
-      selectedAnnotation.value.name = editingAnnotationName.value.trim()
-      // Also update in the annotations array
-      const annotation = annotations.value.find(a => a.id === selectedAnnotation.value?.id)
+      const newName = editingAnnotationName.value.trim()
+      const annotationId = selectedAnnotation.value.id
+
+      // Optimistic update
+      selectedAnnotation.value.name = newName
+      const annotation = annotations.value.find(a => a.id === annotationId)
       if (annotation) {
-        annotation.name = editingAnnotationName.value.trim()
+        annotation.name = newName
       }
-      // Sync to viewer to update ROI label on image
       syncAnnotationsToViewer()
+
+      // Save to API
+      try {
+        await annotationsApi.update(annotationId, { name: newName })
+        console.log('[Layout] Annotation name updated:', annotationId, newName)
+      } catch (err) {
+        console.error('[Layout] Failed to update annotation name:', err)
+      }
     }
     isEditingAnnotationName.value = false
   }
@@ -2778,8 +2792,21 @@ SuperNavi - Plataforma de Patologia Digital
     isEditingAnnotationName.value = false
   }
 
+  // Convert API message to local message format
+  function apiToLocalMessage (apiMsg: ApiMessage): Message {
+    return {
+      id: apiMsg.id,
+      authorId: apiMsg.authorId,
+      content: apiMsg.content,
+      timestamp: new Date(apiMsg.createdAt),
+      type: apiMsg.type.replace('_', '-') as Message['type'],
+      aiConfidence: apiMsg.aiConfidence ?? undefined,
+      aiFindings: apiMsg.aiFindings ?? undefined,
+    }
+  }
+
   // Discussion actions
-  function selectAnnotation (annotation: Annotation) {
+  async function selectAnnotation (annotation: Annotation) {
     selectedAnnotation.value = annotation
     // Reset unread count
     annotation.unreadCount = 0
@@ -2788,6 +2815,20 @@ SuperNavi - Plataforma de Patologia Digital
     // Open mobile panel if on mobile
     if (mobile.value) {
       mobilePanel.value = true
+    }
+
+    // Load messages from API if not already loaded
+    if (annotation.messages.length === 0) {
+      isLoadingMessages.value = true
+      try {
+        const apiMessages = await annotationsApi.getMessages(annotation.id)
+        annotation.messages = apiMessages.map(apiToLocalMessage)
+        console.log('[Layout] Loaded', annotation.messages.length, 'messages for annotation', annotation.id)
+      } catch (err) {
+        console.error('[Layout] Failed to load messages:', err)
+      } finally {
+        isLoadingMessages.value = false
+      }
     }
   }
 
@@ -2800,17 +2841,42 @@ SuperNavi - Plataforma de Patologia Digital
   async function sendMessage () {
     if (!newMessage.value.trim() || !selectedAnnotation.value || isSendingMessage.value) return
 
-    const message: Message = {
-      id: `msg-${Date.now()}`,
-      authorId: currentUser.id,
-      content: newMessage.value.trim(),
-      timestamp: new Date(),
-      type: 'text',
-    }
-
-    selectedAnnotation.value.messages.push(message)
-    selectedAnnotation.value.updatedAt = new Date()
+    const content = newMessage.value.trim()
+    const annotationId = selectedAnnotation.value.id
     newMessage.value = ''
+    isSendingMessage.value = true
+
+    try {
+      // Save to API
+      const savedMessage = await annotationsApi.sendMessage(annotationId, { content })
+
+      // Add to local state with API response
+      const message: Message = {
+        id: savedMessage.id?.toString() || `msg-${Date.now()}`,
+        authorId: currentUser.value.id,
+        content: savedMessage.content || content,
+        timestamp: new Date(savedMessage.createdAt || Date.now()),
+        type: 'text',
+      }
+
+      selectedAnnotation.value.messages.push(message)
+      selectedAnnotation.value.updatedAt = new Date()
+      console.log('[Layout] Message saved:', annotationId, message.id)
+    } catch (err) {
+      console.error('[Layout] Failed to save message:', err)
+      // Fallback: add locally even if API fails
+      const message: Message = {
+        id: `msg-${Date.now()}`,
+        authorId: currentUser.value.id,
+        content,
+        timestamp: new Date(),
+        type: 'text',
+      }
+      selectedAnnotation.value.messages.push(message)
+      selectedAnnotation.value.updatedAt = new Date()
+    } finally {
+      isSendingMessage.value = false
+    }
 
     // Only trigger AI response if AI agent is enabled
     if (aiAgentEnabled.value) {
@@ -2875,7 +2941,7 @@ SuperNavi - Plataforma de Patologia Digital
 
   function getParticipant (id: string): Participant | undefined {
     if (id === 'ai-pathologist') return aiAgent
-    if (id === currentUser.id) return currentUser
+    if (id === currentUser.value.id) return currentUser.value
     return sampleParticipants.find(p => p.id === id)
   }
 
@@ -3001,18 +3067,29 @@ SuperNavi - Plataforma de Patologia Digital
   }
 
   // Confirm ROI deletion
-  function confirmDeleteROI () {
+  async function confirmDeleteROI () {
     if (roiToDelete.value !== null) {
-      const annotationIndex = annotations.value.findIndex(a => a.id === roiToDelete.value)
-      if (annotationIndex !== -1) {
-        // Remove annotation from list
+      const annotationId = roiToDelete.value
+      const annotationIndex = annotations.value.findIndex(a => a.id === annotationId)
+      const deletedAnnotation = annotations.value[annotationIndex]
+      if (annotationIndex !== -1 && deletedAnnotation) {
+        // Optimistic update: remove from local state immediately
         annotations.value.splice(annotationIndex, 1)
-        // If this was the selected annotation, clear selection
-        if (selectedAnnotation.value?.id === roiToDelete.value) {
+        if (selectedAnnotation.value?.id === annotationId) {
           selectedAnnotation.value = null
         }
-        // Sync to viewer
         syncAnnotationsToViewer()
+
+        // Persist to backend
+        try {
+          await annotationsApi.delete(annotationId)
+          console.log('[Layout] Annotation deleted:', annotationId)
+        } catch (err) {
+          console.error('[Layout] Failed to delete annotation:', err)
+          // Rollback: restore the annotation
+          annotations.value.splice(annotationIndex, 0, deletedAnnotation)
+          syncAnnotationsToViewer()
+        }
       }
     }
     cancelDeleteROI()
@@ -3026,24 +3103,38 @@ SuperNavi - Plataforma de Patologia Digital
   }
 
   // Toggle annotation resolved status
-  function toggleAnnotationResolved () {
+  async function toggleAnnotationResolved () {
     if (!selectedAnnotation.value) return
 
-    const newStatus = selectedAnnotation.value.status === 'resolved' ? 'open' : 'resolved'
+    const oldStatus = selectedAnnotation.value.status
+    const newStatus = oldStatus === 'resolved' ? 'open' : 'resolved'
+
+    // Optimistic update
     selectedAnnotation.value.status = newStatus
 
     // Add system message
     const statusMessage: Message = {
       id: `msg-${Date.now()}`,
-      authorId: currentUser.id,
+      authorId: currentUser.value.id,
       content: newStatus === 'resolved'
-        ? `${currentUser.name} marcou esta discussão como resolvida`
-        : `${currentUser.name} reabriu esta discussão`,
+        ? `${currentUser.value.name} marcou esta discussão como resolvida`
+        : `${currentUser.value.name} reabriu esta discussão`,
       timestamp: new Date(),
       type: 'system',
     }
     selectedAnnotation.value.messages.push(statusMessage)
     selectedAnnotation.value.updatedAt = new Date()
+
+    // Persist to backend
+    try {
+      await annotationsApi.update(selectedAnnotation.value.id, { status: newStatus })
+      console.log('[Layout] Annotation status updated:', selectedAnnotation.value.id, newStatus)
+    } catch (err) {
+      console.error('[Layout] Failed to update annotation status:', err)
+      // Rollback
+      selectedAnnotation.value.status = oldStatus
+      selectedAnnotation.value.messages.pop()
+    }
   }
 
   // Open invite pathologist dialog
@@ -3092,8 +3183,8 @@ SuperNavi - Plataforma de Patologia Digital
           // Add system message for each
           const inviteMessage: Message = {
             id: `msg-${Date.now()}-${pathId}`,
-            authorId: currentUser.id,
-            content: `${currentUser.name} adicionou ${pathologist.name} à discussão`,
+            authorId: currentUser.value.id,
+            content: `${currentUser.value.name} adicionou ${pathologist.name} à discussão`,
             timestamp: new Date(),
             type: 'system',
           }
@@ -3113,8 +3204,8 @@ SuperNavi - Plataforma de Patologia Digital
 
       const inviteMessage: Message = {
         id: `msg-${Date.now()}`,
-        authorId: currentUser.id,
-        content: `${currentUser.name} convidou ${newParticipant.name} para a discussão`,
+        authorId: currentUser.value.id,
+        content: `${currentUser.value.name} convidou ${newParticipant.name} para a discussão`,
         timestamp: new Date(),
         type: 'system',
       }
@@ -3186,18 +3277,28 @@ SuperNavi - Plataforma de Patologia Digital
   }
 
   // Handle drawing complete - create new annotation
-  function handleDrawingComplete (coordinates: { x: number, y: number, width: number, height: number }, type: 'rectangle' | 'arrow') {
+  async function handleDrawingComplete (coordinates: { x: number, y: number, width: number, height: number }, type: 'rectangle' | 'arrow') {
     console.log('[Layout] Drawing complete:', type, coordinates)
 
-    // Create new annotation
-    const newAnnotation: Annotation = {
-      id: Date.now(), // Use timestamp as unique ID
-      name: `ROI ${annotations.value.length + 1}`,
-      type: type,
-      color: getNextColor(),
-      coordinates: coordinates,
-      owner: currentUser,
-      participants: [currentUser, aiAgent],
+    const slideId = activeSlideId.value
+    if (!slideId) {
+      console.error('[Layout] No active slide ID, cannot create annotation')
+      return
+    }
+
+    const color = getNextColor()
+    const name = `ROI ${annotations.value.length + 1}`
+
+    // Optimistically create local annotation with temporary ID
+    const tempId = Date.now()
+    const localAnnotation: Annotation = {
+      id: tempId,
+      name,
+      type,
+      color,
+      coordinates,
+      owner: currentUser.value,
+      participants: [currentUser.value],
       messages: [],
       status: 'open',
       priority: 'normal',
@@ -3206,11 +3307,11 @@ SuperNavi - Plataforma de Patologia Digital
       updatedAt: new Date(),
     }
 
-    // Add to annotations list
-    annotations.value.push(newAnnotation)
+    // Add to annotations list immediately (optimistic update)
+    annotations.value.push(localAnnotation)
 
     // Select the new annotation (opens discussion)
-    selectAnnotation(newAnnotation)
+    selectAnnotation(localAnnotation)
 
     // Switch to annotations tab
     activeTab.value = 'annotations'
@@ -3223,7 +3324,76 @@ SuperNavi - Plataforma de Patologia Digital
     // Reset tool to pan mode
     selectTool('pan')
 
-    console.log('[Layout] New annotation created:', newAnnotation)
+    // Save to API in background
+    try {
+      const apiAnnotation = await annotationsApi.create(slideId, {
+        name,
+        color,
+        type,
+        coordinates,
+        priority: 'normal',
+      })
+
+      // Update local annotation with real ID from API
+      const index = annotations.value.findIndex(a => a.id === tempId)
+      if (index !== -1) {
+        annotations.value[index]!.id = apiAnnotation.id
+        // Update selected annotation if it's the one we just created
+        if (selectedAnnotation.value?.id === tempId) {
+          selectedAnnotation.value.id = apiAnnotation.id
+        }
+      }
+
+      console.log('[Layout] Annotation saved to API with ID:', apiAnnotation.id)
+    } catch (err) {
+      console.error('[Layout] Failed to save annotation:', err)
+      // Remove the optimistic annotation on failure
+      const index = annotations.value.findIndex(a => a.id === tempId)
+      if (index !== -1) {
+        annotations.value.splice(index, 1)
+      }
+      if (selectedAnnotation.value?.id === tempId) {
+        selectedAnnotation.value = null
+      }
+    }
+  }
+
+  // Handle ROI moved - update annotation coordinates and persist
+  async function handleROIMoved (roiId: number, coordinates: { x: number, y: number, width: number, height: number }) {
+    console.log('[Layout] ROI moved:', roiId, coordinates)
+
+    // Find the annotation
+    const annotation = annotations.value.find(a => a.id === roiId)
+    if (!annotation) {
+      console.warn('[Layout] Annotation not found for ROI move:', roiId)
+      return
+    }
+
+    // Store old coordinates for rollback
+    const oldCoordinates = { ...annotation.coordinates }
+
+    // Optimistic update: update local state immediately
+    annotation.coordinates = coordinates
+    annotation.updatedAt = new Date()
+
+    // Also update selected annotation if it's the same
+    if (selectedAnnotation.value?.id === roiId) {
+      selectedAnnotation.value.coordinates = coordinates
+      selectedAnnotation.value.updatedAt = new Date()
+    }
+
+    // Persist to backend
+    try {
+      await annotationsApi.update(roiId, { coordinates })
+      console.log('[Layout] Annotation coordinates updated:', roiId)
+    } catch (err) {
+      console.error('[Layout] Failed to update annotation coordinates:', err)
+      // Rollback
+      annotation.coordinates = oldCoordinates
+      if (selectedAnnotation.value?.id === roiId) {
+        selectedAnnotation.value.coordinates = oldCoordinates
+      }
+    }
   }
 
   // Watch annotations and sync to viewer
@@ -3286,6 +3456,8 @@ SuperNavi - Plataforma de Patologia Digital
     viewerControls.onROIClick(handleViewerROIClick)
     // Register callback for when ROIs are deleted in the viewer
     viewerControls.onROIDelete(handleViewerROIDelete)
+    // Register callback for when ROIs are moved in the viewer
+    viewerControls.onROIMoved(handleROIMoved)
     // Register callback for when drawing is complete
     viewerControls.onDrawingComplete(handleDrawingComplete)
     // Register callback for when measurement is complete
@@ -3320,9 +3492,71 @@ SuperNavi - Plataforma de Patologia Digital
 
 <style scoped lang="scss">
 /* ========================================
-   ULTRA-MINIMAL LAYOUT
-   Focus on pathology work
+   APPLE HUMAN INTERFACE GUIDELINES
+   Refined medical pathology viewer
    ======================================== */
+
+// Apple Design Tokens
+$apple-blur-standard: blur(20px) saturate(180%);
+$apple-blur-heavy: blur(40px) saturate(200%);
+$apple-blur-ultra: blur(80px) saturate(220%);
+$apple-radius-sm: 8px;
+$apple-radius-md: 12px;
+$apple-radius-lg: 16px;
+$apple-radius-xl: 22px;
+$apple-radius-pill: 100px;
+$apple-timing: cubic-bezier(0.25, 0.1, 0.25, 1);
+$apple-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+$apple-duration-fast: 0.15s;
+$apple-duration-normal: 0.25s;
+$apple-duration-slow: 0.4s;
+
+// Apple Shadow System
+@mixin apple-shadow-sm {
+  box-shadow:
+    0 0.5px 0 0 rgba(255, 255, 255, 0.15) inset,
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+@mixin apple-shadow-md {
+  box-shadow:
+    0 0.5px 0 0 rgba(255, 255, 255, 0.12) inset,
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+@mixin apple-shadow-lg {
+  box-shadow:
+    0 0.5px 0 0 rgba(255, 255, 255, 0.1) inset,
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.12);
+}
+
+@mixin apple-shadow-elevated {
+  box-shadow:
+    0 0.5px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 8px 20px rgba(0, 0, 0, 0.12),
+    0 24px 64px rgba(0, 0, 0, 0.16);
+}
+
+// Apple Vibrancy Material
+@mixin apple-vibrancy($opacity: 0.72) {
+  background: rgba(var(--v-theme-surface), $opacity);
+  backdrop-filter: $apple-blur-standard;
+  -webkit-backdrop-filter: $apple-blur-standard;
+}
+
+@mixin apple-vibrancy-heavy($opacity: 0.85) {
+  background: rgba(var(--v-theme-surface), $opacity);
+  backdrop-filter: $apple-blur-heavy;
+  -webkit-backdrop-filter: $apple-blur-heavy;
+}
+
+// Apple Border
+@mixin apple-border($opacity: 0.08) {
+  border: 0.5px solid rgba(var(--v-theme-on-surface), $opacity);
+}
 
 // Brand Styles
 .brand-logo {
@@ -3332,16 +3566,18 @@ SuperNavi - Plataforma de Patologia Digital
 }
 
 .brand-name {
-  font-family: 'Manrope', system-ui, sans-serif;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Manrope', system-ui, sans-serif;
+  font-feature-settings: 'ss01' on, 'ss02' on;
 }
 
 .brand-super {
-  font-weight: 400;
+  font-weight: 300;
+  letter-spacing: -0.01em;
 }
 
 .brand-navi {
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 // Global text contrast fixes for both themes
@@ -3373,27 +3609,33 @@ SuperNavi - Plataforma de Patologia Digital
   }
 }
 
-/* Mobile Header Bar */
+/* ========================================
+   APPLE-STYLE MOBILE NAVIGATION BAR
+   iOS native-feeling header
+   ======================================== */
 .mobile-header-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 56px;
+  height: 52px;
   z-index: 1000;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 12px;
-  background: rgba(var(--v-theme-surface), 0.95);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+  padding: 0 8px 0 4px;
+  @include apple-vibrancy(0.88);
+  border-bottom: 0.5px solid rgba(var(--v-theme-on-surface), 0.1);
+  @include apple-shadow-sm;
 }
 
 .back-btn-mobile {
   color: rgb(var(--v-theme-primary)) !important;
   flex-shrink: 0;
+
+  :deep(.v-icon) {
+    font-size: 22px;
+  }
 }
 
 .mobile-case-selector {
@@ -3401,14 +3643,15 @@ SuperNavi - Plataforma de Patologia Digital
   align-items: center;
   flex: 1;
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 6px 10px;
+  border-radius: $apple-radius-md;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all $apple-duration-fast $apple-timing;
+  -webkit-tap-highlight-color: transparent;
 
-  &:hover,
   &:active {
-    background: rgba(var(--v-theme-on-surface), 0.06);
+    background: rgba(var(--v-theme-on-surface), 0.08);
+    transform: scale(0.98);
   }
 }
 
@@ -3417,12 +3660,14 @@ SuperNavi - Plataforma de Patologia Digital
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  gap: 2px;
+  gap: 1px;
 }
 
 .mobile-case-name {
-  font-size: 14px;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.02em;
   color: rgb(var(--v-theme-on-surface));
   white-space: nowrap;
   overflow: hidden;
@@ -3430,9 +3675,10 @@ SuperNavi - Plataforma de Patologia Digital
 }
 
 .mobile-slide-name {
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 12px;
-  color: rgb(var(--v-theme-on-surface));
-  opacity: 0.6;
+  letter-spacing: -0.01em;
+  color: rgba(var(--v-theme-on-surface), 0.55);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3441,162 +3687,255 @@ SuperNavi - Plataforma de Patologia Digital
 .mobile-header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-/* Floating Case/Slide Selector (Centered) - Desktop Only */
+/* ========================================
+   APPLE-STYLE FLOATING CASE SELECTOR
+   Signature pill design with vibrancy
+   ======================================== */
 .floating-case-container {
   position: fixed;
-  top: 12px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
   pointer-events: auto;
   display: flex;
   align-items: center;
-  background: rgba(var(--v-theme-surface), 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  padding: 4px 6px;
+  @include apple-vibrancy-heavy(0.78);
+  @include apple-border(0.12);
+  border-radius: $apple-radius-pill;
+  @include apple-shadow-md;
+  padding: 5px 8px;
+
+  // Signature inner glow
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      transparent 50%
+    );
+    pointer-events: none;
+  }
+
+  // Hover lift effect
+  transition: transform $apple-duration-normal $apple-timing,
+              box-shadow $apple-duration-normal $apple-timing;
+
+  &:hover {
+    transform: translateX(-50%) translateY(-1px);
+    @include apple-shadow-lg;
+  }
 }
 
 .selector-divider {
-  height: 20px !important;
-  min-height: 20px !important;
-  max-height: 20px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
   align-self: center;
-  opacity: 0.15;
+  opacity: 0.12;
+  margin: 0 2px;
 }
 
 .case-selector,
 .slide-selector {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 14px;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: $apple-radius-lg;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all $apple-duration-fast $apple-timing;
 
-  &:hover {
-    background: rgba(var(--v-theme-on-surface), 0.06);
+  // Subtle hover background
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: calc($apple-radius-lg - 2px);
+    background: rgba(var(--v-theme-on-surface), 0);
+    transition: background $apple-duration-fast $apple-timing;
+  }
+
+  &:hover::before {
+    background: rgba(var(--v-theme-on-surface), 0.05);
+  }
+
+  &:active::before {
+    background: rgba(var(--v-theme-on-surface), 0.08);
   }
 
   .case-icon,
   .slide-icon {
-    opacity: 0.6;
+    opacity: 0.55;
+    transition: opacity $apple-duration-fast $apple-timing;
+  }
+
+  &:hover .case-icon,
+  &:hover .slide-icon {
+    opacity: 0.75;
   }
 
   .case-name {
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 590;
+    letter-spacing: -0.01em;
     color: rgb(var(--v-theme-on-surface));
     white-space: nowrap;
   }
 
   .slide-name {
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-size: 13px;
     font-weight: 400;
-    color: rgb(var(--v-theme-on-surface));
-    opacity: 0.8;
+    letter-spacing: -0.005em;
+    color: rgba(var(--v-theme-on-surface), 0.72);
     white-space: nowrap;
   }
 
   .chevron-icon {
-    opacity: 0.4;
-    transition: all 0.2s ease;
+    opacity: 0.35;
+    transition: all $apple-duration-fast $apple-spring;
+    margin-left: -2px;
   }
 
   &:hover .chevron-icon {
-    opacity: 0.7;
+    opacity: 0.55;
+    transform: translateY(1px);
   }
 }
 
-/* Case Actions Dropdown */
+/* ========================================
+   APPLE-STYLE DROPDOWN MENUS
+   Native macOS context menu aesthetics
+   ======================================== */
 .case-actions-dropdown {
-  background: rgba(var(--v-theme-surface), 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  @include apple-vibrancy-heavy(0.92);
+  @include apple-border(0.12);
+  border-radius: $apple-radius-md;
+  @include apple-shadow-elevated;
   min-width: 240px;
   overflow: hidden;
+  animation: appleMenuIn 0.18s $apple-spring both;
 
   .dropdown-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
+    padding: 10px 14px 8px;
   }
 
   .dropdown-title {
-    font-size: 12px;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: rgba(var(--v-theme-on-surface), 0.5);
+    letter-spacing: 0.04em;
+    color: rgba(var(--v-theme-on-surface), 0.45);
+  }
+}
+
+@keyframes appleMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }
 
 .case-action-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 11px;
+  padding: 10px 14px;
+  margin: 2px 6px;
+  border-radius: $apple-radius-sm;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all $apple-duration-fast $apple-timing;
 
   span {
-    font-size: 14px;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
     color: rgb(var(--v-theme-on-surface));
   }
 
+  .v-icon {
+    opacity: 0.7;
+    transition: opacity $apple-duration-fast $apple-timing;
+  }
+
   &:hover {
-    background: rgba(var(--v-theme-on-surface), 0.06);
+    background: rgba(var(--v-theme-primary), 0.12);
+
+    .v-icon {
+      opacity: 0.9;
+    }
+  }
+
+  &:active {
+    background: rgba(var(--v-theme-primary), 0.18);
+    transform: scale(0.98);
   }
 
   &--active {
-    background: rgba(var(--v-theme-primary), 0.06);
+    background: rgba(var(--v-theme-primary), 0.08);
 
     span {
       font-weight: 500;
+      color: rgb(var(--v-theme-primary));
     }
   }
 
   &--danger:hover {
-    background: rgba(var(--v-theme-error), 0.08);
+    background: rgba(var(--v-theme-error), 0.12);
 
     span {
       color: rgb(var(--v-theme-error));
     }
+
+    .v-icon {
+      color: rgb(var(--v-theme-error)) !important;
+    }
   }
 }
 
-/* Slides Dropdown */
+/* Slides Dropdown - Apple Style */
 .slides-dropdown {
-  background: rgba(var(--v-theme-surface), 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  min-width: 220px;
+  @include apple-vibrancy-heavy(0.92);
+  @include apple-border(0.12);
+  border-radius: $apple-radius-md;
+  @include apple-shadow-elevated;
+  min-width: 240px;
   overflow: hidden;
+  animation: appleMenuIn 0.18s $apple-spring both;
 
   .dropdown-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
+    padding: 10px 14px 8px;
   }
 
   .dropdown-title {
-    font-size: 12px;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     color: rgba(var(--v-theme-on-surface), 0.5);
   }
 }
@@ -3604,30 +3943,40 @@ SuperNavi - Plataforma de Patologia Digital
 .slide-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 10px 14px;
+  margin: 2px 6px;
+  border-radius: $apple-radius-sm;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all $apple-duration-fast $apple-timing;
 
   &:hover {
-    background: rgba(var(--v-theme-on-surface), 0.06);
+    background: rgba(var(--v-theme-primary), 0.1);
+  }
+
+  &:active {
+    background: rgba(var(--v-theme-primary), 0.16);
+    transform: scale(0.98);
   }
 
   &--active {
-    background: rgba(var(--v-theme-primary), 0.08);
+    background: rgba(var(--v-theme-primary), 0.12);
 
     .slide-icon {
       opacity: 1;
+      color: rgb(var(--v-theme-primary));
     }
 
     .slide-item-name {
       color: rgb(var(--v-theme-primary));
+      font-weight: 600;
     }
   }
 
   .slide-icon {
     opacity: 0.5;
     flex-shrink: 0;
+    transition: all $apple-duration-fast $apple-timing;
   }
 
   .slide-info {
@@ -3645,45 +3994,49 @@ SuperNavi - Plataforma de Patologia Digital
   }
 
   .slide-item-name {
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
+    letter-spacing: -0.01em;
     color: rgb(var(--v-theme-on-surface));
     line-height: 1.3;
+    transition: all $apple-duration-fast $apple-timing;
   }
 
   .slide-stain-chip {
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-size: 10px !important;
     font-weight: 500;
     height: 16px !important;
-    padding: 0 4px !important;
+    padding: 0 5px !important;
     color: rgb(var(--v-theme-secondary)) !important;
-    opacity: 0.8;
+    opacity: 0.85;
+    border-radius: 4px !important;
   }
 
   .slide-id-text {
+    font-family: 'SF Mono', 'Menlo', monospace;
     font-size: 10px;
-    color: rgb(var(--v-theme-on-surface));
-    opacity: 0.4;
+    color: rgba(var(--v-theme-on-surface), 0.4);
     line-height: 1.2;
-    font-family: 'Roboto Mono', monospace;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.02em;
   }
 
   .slide-stain {
     font-size: 11px;
-    color: rgb(var(--v-theme-on-surface));
-    opacity: 0.5;
+    color: rgba(var(--v-theme-on-surface), 0.5);
     line-height: 1.2;
   }
 
   .check-icon {
     flex-shrink: 0;
+    color: rgb(var(--v-theme-primary));
   }
 }
 
 /* ========================================
-   STUDIO-GRADE TOOLBAR
-   Ultra-refined, professional design
+   APPLE-STYLE FLOATING TOOLBAR
+   macOS Control Center inspired
    ======================================== */
 
 .studio-toolbar {
@@ -3693,114 +4046,97 @@ SuperNavi - Plataforma de Patologia Digital
   transform: translateY(-50%);
   z-index: 1001;
 
-  /* Ultra-subtle glassmorphism */
-  background: rgba(var(--v-theme-surface), 0.72);
-  backdrop-filter: blur(40px) saturate(140%);
-  -webkit-backdrop-filter: blur(40px) saturate(140%);
+  // Apple vibrancy material
+  @include apple-vibrancy(0.68);
+  @include apple-border(0.1);
+  border-radius: $apple-radius-lg;
+  @include apple-shadow-lg;
 
-  /* Minimal border with precision */
-  border: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 14px;
+  padding: 8px;
+  width: 56px;
 
-  /* Refined multi-layer shadow */
-  box-shadow:
-    0 0 0 0.5px rgba(var(--v-theme-on-surface), 0.04),
-    0 2px 8px -1px rgba(0, 0, 0, 0.08),
-    0 8px 24px -4px rgba(0, 0, 0, 0.12),
-    0 16px 48px -8px rgba(0, 0, 0, 0.04);
+  // Signature inner highlight
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    );
+    pointer-events: none;
+  }
 
-  padding: 6px;
-  width: 52px;
-
-  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: all $apple-duration-slow $apple-timing;
 
   &.toolbar-hidden {
     opacity: 0;
-    transform: translateY(-50%) translateX(-20px) scale(0.96);
+    transform: translateY(-50%) translateX(-16px) scale(0.94);
     pointer-events: none;
   }
 
   &.toolbar-mobile {
     left: 50%;
     top: auto;
-    bottom: 20px;
+    bottom: 24px;
     transform: translateX(-50%);
     width: auto;
-    padding: 4px 8px;
-    border-radius: 18px;
+    padding: 6px 12px;
+    border-radius: $apple-radius-pill;
 
     &.toolbar-hidden {
       opacity: 0;
-      transform: translateX(-50%) translateY(20px) scale(0.96);
+      transform: translateX(-50%) translateY(16px) scale(0.94);
     }
   }
 }
 
 .studio-toolbar-content {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .tool-item {
-  animation: toolFadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+  animation: appleToolFadeIn $apple-duration-normal $apple-spring backwards;
 
-  &:nth-child(1) {
-    animation-delay: 0.02s;
-  }
-
-  &:nth-child(3) {
-    animation-delay: 0.04s;
-  }
-
-  &:nth-child(4) {
-    animation-delay: 0.06s;
-  }
-
-  &:nth-child(5) {
-    animation-delay: 0.08s;
-  }
-
-  &:nth-child(6) {
-    animation-delay: 0.1s;
-  }
-
-  &:nth-child(8) {
-    animation-delay: 0.12s;
-  }
-
-  &:nth-child(9) {
-    animation-delay: 0.14s;
-  }
-
-  &:nth-child(11) {
-    animation-delay: 0.16s;
-  }
-
-  &:nth-child(12) {
-    animation-delay: 0.18s;
+  @for $i from 1 through 12 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{$i * 0.025}s;
+    }
   }
 }
 
-@keyframes toolFadeIn {
+@keyframes appleToolFadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: scale(0.8);
   }
-
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
 .tool-separator {
-  height: 0.5px;
-  margin: 5px 10px;
-  background: rgba(var(--v-theme-on-surface), 0.08);
+  height: 1px;
+  margin: 6px 10px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--v-theme-on-surface), 0.08) 20%,
+    rgba(var(--v-theme-on-surface), 0.08) 80%,
+    transparent 100%
+  );
 }
 
-/* Studio Button - The Heart of the Design */
+/* ========================================
+   APPLE-STYLE TOOLBAR BUTTON
+   SF Symbol-inspired with haptic feedback feel
+   ======================================== */
 .studio-btn {
   position: relative;
   display: flex;
@@ -3811,185 +4147,170 @@ SuperNavi - Plataforma de Patologia Digital
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 9px;
+  border-radius: $apple-radius-sm;
   background: transparent;
   cursor: pointer;
   outline: none;
-  color: rgba(var(--v-theme-on-surface), 0.65);
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  -webkit-tap-highlight-color: transparent;
 
-  transition: all 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: all $apple-duration-normal $apple-timing;
 
-  /* Glow effect layer */
+  // Hover/active background
   .btn-glow {
     position: absolute;
     inset: 0;
-    border-radius: 9px;
-    background: rgba(var(--v-theme-primary), 0);
-    opacity: 0;
-    transition: all 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border-radius: $apple-radius-sm;
+    background: transparent;
+    transition: all $apple-duration-fast $apple-timing;
   }
 
-  /* Icon */
+  // Icon with Apple-like weight
   .btn-icon {
     position: relative;
     z-index: 1;
     font-size: 20px;
-    transition: all 0.22s cubic-bezier(0.34, 1.26, 0.64, 1);
+    transition: all $apple-duration-fast $apple-spring;
   }
 
-  /* Tooltip */
+  // Apple-style tooltip
   .btn-tooltip {
     position: absolute;
-    left: 54px;
+    left: 58px;
     white-space: nowrap;
-    padding: 7px 12px;
-    border-radius: 7px;
-    background: rgba(var(--v-theme-surface), 0.95);
-    backdrop-filter: blur(20px);
-    border: 0.5px solid rgba(var(--v-theme-on-surface), 0.1);
+    padding: 6px 10px;
+    border-radius: $apple-radius-sm;
+    @include apple-vibrancy-heavy(0.95);
+    @include apple-border(0.15);
+    @include apple-shadow-sm;
     color: rgb(var(--v-theme-on-surface));
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
     opacity: 0;
-    transform: translateX(-4px);
+    transform: translateX(-6px) scale(0.96);
     pointer-events: none;
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.08),
-      0 8px 24px rgba(0, 0, 0, 0.06);
-    transition: all 0.2s cubic-bezier(0.34, 1.26, 0.64, 1);
+    transition: all $apple-duration-fast $apple-spring;
     z-index: 10;
   }
 
-  /* Hover State */
+  // Hover State
   &:hover:not(:disabled) {
     color: rgb(var(--v-theme-on-surface));
 
     .btn-glow {
-      background: rgba(var(--v-theme-on-surface), 0.06);
-      opacity: 1;
+      background: rgba(var(--v-theme-on-surface), 0.07);
     }
 
     .btn-icon {
-      transform: scale(1.08);
+      transform: scale(1.06);
     }
 
     .btn-tooltip {
       opacity: 1;
-      transform: translateX(0);
+      transform: translateX(0) scale(1);
     }
   }
 
-  /* Active State */
+  // Active/Selected State - Apple blue highlight
   &.is-active {
     color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.08);
 
     .btn-glow {
-      background: rgba(var(--v-theme-primary), 0.12);
-      opacity: 1;
-      box-shadow:
-        inset 0 0 0 0.5px rgba(var(--v-theme-primary), 0.2),
-        0 0 0 0.5px rgba(var(--v-theme-primary), 0.08);
+      background: rgba(var(--v-theme-primary), 0.14);
+      box-shadow: inset 0 0 0 1.5px rgba(var(--v-theme-primary), 0.25);
     }
 
     .btn-icon {
-      transform: scale(1.04);
-      filter: drop-shadow(0 0 6px rgba(var(--v-theme-primary), 0.3));
+      transform: scale(1.02);
     }
 
-    &:hover .btn-icon {
+    &:hover {
+      .btn-glow {
+        background: rgba(var(--v-theme-primary), 0.18);
+      }
+
+      .btn-icon {
+        transform: scale(1.08);
+      }
+    }
+  }
+
+  // Press State - haptic feedback simulation
+  &:active:not(:disabled) {
+    transform: scale(0.92);
+    transition-duration: 0.05s;
+
+    .btn-glow {
+      background: rgba(var(--v-theme-on-surface), 0.12);
+    }
+  }
+
+  // Disabled State
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  // Action Buttons (zoom controls)
+  &.studio-btn-action:hover:not(:disabled):not(.is-active) {
+    color: rgba(var(--v-theme-on-surface), 0.9);
+
+    .btn-glow {
+      background: rgba(var(--v-theme-on-surface), 0.08);
+    }
+
+    .btn-icon {
       transform: scale(1.1);
     }
   }
 
-  /* Press State */
-  &:active:not(:disabled) {
-    transform: scale(0.94);
-
-    .btn-icon {
-      transform: scale(1);
-    }
-  }
-
-  /* Disabled State */
-  &:disabled {
-    opacity: 0.25;
-    cursor: not-allowed;
-
-    .btn-icon {
-      filter: grayscale(100%);
-    }
-  }
-
-  /* Action Button Variant (for zoom controls) */
-  &.studio-btn-action:hover:not(:disabled):not(.is-active) {
-    color: rgb(var(--v-theme-secondary));
-
-    .btn-glow {
-      background: rgba(var(--v-theme-secondary), 0.08);
-    }
-
-    .btn-icon {
-      transform: scale(1.12);
-      filter: drop-shadow(0 0 4px rgba(var(--v-theme-secondary), 0.25));
-    }
-  }
-
-  /* Back Button Variant - subtle accent to stand out */
+  // Back Button - primary accent
   &.studio-btn-back {
     color: rgb(var(--v-theme-primary));
 
     &:hover {
-      color: rgb(var(--v-theme-primary));
-
       .btn-glow {
         background: rgba(var(--v-theme-primary), 0.12);
       }
 
       .btn-icon {
-        transform: translateX(-2px) scale(1.05);
+        transform: translateX(-2px) scale(1.04);
       }
     }
   }
 
-  /* Focus Mode Active - Highlighted */
+  // Focus Mode Active
   &.studio-btn-focus-active {
     color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.12);
 
     .btn-glow {
       background: rgba(var(--v-theme-primary), 0.15);
-      opacity: 1;
-      box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.3);
-    }
-
-    .btn-icon {
-      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
+      box-shadow: inset 0 0 0 1.5px rgba(var(--v-theme-primary), 0.3);
     }
 
     &:hover {
-      color: rgb(var(--v-theme-primary));
-      background: rgba(var(--v-theme-primary), 0.18);
-
       .btn-glow {
-        background: rgba(var(--v-theme-primary), 0.22);
-        box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.4);
+        background: rgba(var(--v-theme-primary), 0.2);
+        box-shadow: inset 0 0 0 1.5px rgba(var(--v-theme-primary), 0.4);
       }
 
       .btn-icon {
-        transform: scale(1.1);
-        filter: drop-shadow(0 0 6px rgba(var(--v-theme-primary), 0.5));
+        transform: scale(1.08);
       }
     }
   }
 }
 
-/* Mobile Toolbar */
+/* ========================================
+   APPLE-STYLE MOBILE TOOLBAR
+   iOS dock-inspired compact controls
+   ======================================== */
 .studio-toolbar-mobile {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
 .studio-btn-compact {
@@ -3997,152 +4318,161 @@ SuperNavi - Plataforma de Patologia Digital
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   padding: 0;
   border: none;
-  border-radius: 11px;
+  border-radius: $apple-radius-sm;
   background: transparent;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  color: rgba(var(--v-theme-on-surface), 0.65);
   cursor: pointer;
   outline: none;
-  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  -webkit-tap-highlight-color: transparent;
+  transition: all $apple-duration-fast $apple-timing;
 
   :deep(.v-icon) {
-    transition: all 0.18s cubic-bezier(0.34, 1.26, 0.64, 1);
+    transition: all $apple-duration-fast $apple-spring;
+    font-size: 21px;
   }
 
   &:active:not(:disabled) {
-    transform: scale(0.92);
-    background: rgba(var(--v-theme-on-surface), 0.04);
-
-    :deep(.v-icon) {
-      transform: scale(0.92);
-    }
+    transform: scale(0.88);
+    background: rgba(var(--v-theme-on-surface), 0.08);
   }
 
   &.is-active {
     color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.1);
+    background: rgba(var(--v-theme-primary), 0.14);
 
     :deep(.v-icon) {
-      transform: scale(1.06);
-      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
+      transform: scale(1.05);
     }
   }
 
   &:disabled {
-    opacity: 0.25;
+    opacity: 0.3;
     cursor: not-allowed;
   }
 
-  /* Focus Mode Active (mobile) */
+  // Focus Mode Active (mobile)
   &.studio-btn-focus-active {
     color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.12);
-    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.25);
-
-    :deep(.v-icon) {
-      filter: drop-shadow(0 0 4px rgba(var(--v-theme-primary), 0.4));
-    }
+    background: rgba(var(--v-theme-primary), 0.15);
+    box-shadow: inset 0 0 0 1.5px rgba(var(--v-theme-primary), 0.25);
   }
 }
 
 .compact-sep {
-  width: 0.5px;
-  height: 20px;
-  margin: 0 4px;
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
   background: rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: $apple-radius-pill;
 }
 
+// Panel Toggle Button - Apple capsule style
 .panel-toggle-btn {
   position: fixed;
-  right: 16px;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 100;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  @include apple-vibrancy(0.8);
+  @include apple-border(0.12);
+  border-radius: $apple-radius-pill !important;
+  @include apple-shadow-sm;
+  transition: all $apple-duration-normal $apple-spring;
 
   &:hover {
-    transform: translateY(-50%) scale(1.1);
-    box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3);
+    transform: translateY(-50%) scale(1.06);
+    @include apple-shadow-md;
+  }
+
+  &:active {
+    transform: translateY(-50%) scale(0.96);
   }
 }
 
+// Fullscreen Exit Button
 .fullscreen-exit-btn {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 14px;
+  right: 14px;
   z-index: 200;
-  transition: all 0.2s ease;
+  @include apple-vibrancy(0.85);
+  @include apple-shadow-sm;
+  border-radius: $apple-radius-sm !important;
+  transition: all $apple-duration-fast $apple-timing;
 
   &:hover {
-    transform: scale(1.1);
+    transform: scale(1.06);
+    @include apple-shadow-md;
+  }
+
+  &:active {
+    transform: scale(0.94);
   }
 }
 
 .viewer-main {
   position: relative;
   overflow: hidden;
-  padding-top: 0 !important; // No app-bar, start from top
+  padding-top: 0 !important;
 }
 
 .viewer-container {
   width: 100%;
   height: 100%;
-  background: #1a1a1a;
+  background: #0a0a0a;
   position: relative;
 }
 
 /* ========================================
-   FLOATING STATUS CARD (Google Maps Style)
+   APPLE-STYLE STATUS BAR
+   Refined floating info chip
    ======================================== */
 
 .status-card {
   position: fixed;
-  bottom: 0;
-  left: 0;
+  bottom: 12px;
+  left: 84px; // Clear of toolbar
   z-index: 100;
+  @include apple-vibrancy(0.75);
+  @include apple-border(0.12);
+  border-radius: $apple-radius-md;
+  @include apple-shadow-sm;
+  padding: 8px 14px;
 
-  /* Fundo sólido */
-  background: rgb(var(--v-theme-surface));
+  transition: all $apple-duration-normal $apple-timing;
+  animation: appleStatusIn $apple-duration-slow $apple-spring backwards;
 
-  /* Border apenas no topo e direita */
-  border-top: 0.5px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-right: 0.5px solid rgba(var(--v-theme-on-surface), 0.12);
-
-  /* Arredondamento apenas no canto superior direito */
-  border-radius: 0 8px 0 0;
-
-  /* Sombra sutil */
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
-
-  padding: 10px 16px;
-
-  transition: all 0.3s ease;
-  animation: statusCardSlideIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+  &:hover {
+    @include apple-shadow-md;
+  }
 
   &.status-card-mobile {
-    padding: 8px 12px;
+    left: 12px;
+    bottom: 70px;
+    padding: 6px 10px;
   }
 }
 
-@keyframes statusCardSlideIn {
+@keyframes appleStatusIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(8px) scale(0.96);
   }
-
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .status-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 12px;
   color: rgb(var(--v-theme-on-surface));
 }
@@ -4150,50 +4480,77 @@ SuperNavi - Plataforma de Patologia Digital
 .status-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   white-space: nowrap;
 
   &.status-loading {
-    color: rgba(var(--v-theme-warning), 0.9);
+    color: rgb(var(--v-theme-warning));
+  }
+
+  &.status-digital-zoom {
+    .status-value {
+      color: rgb(var(--v-theme-warning));
+    }
+    .status-label {
+      color: rgb(var(--v-theme-warning));
+      opacity: 0.8;
+    }
   }
 
   &.status-coords {
-    color: rgba(var(--v-theme-on-surface), 0.7);
+    color: rgba(var(--v-theme-on-surface), 0.6);
+    font-variant-numeric: tabular-nums;
   }
 }
 
 .status-icon {
-  opacity: 0.7;
+  opacity: 0.6;
   flex-shrink: 0;
 }
 
 .status-label {
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  color: rgba(var(--v-theme-on-surface), 0.5);
   font-weight: 400;
-  font-size: 11.5px;
+  font-size: 11px;
+  letter-spacing: 0.01em;
 }
 
 .status-value {
-  color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-surface));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 12.5px;
+  letter-spacing: -0.02em;
+}
+
+.status-native-mag {
+  margin-left: 4px;
+  font-size: 10px !important;
+  height: 18px !important;
+  opacity: 0.7;
 }
 
 .status-separator {
   width: 1px;
-  height: 16px;
+  height: 14px;
   background: rgba(var(--v-theme-on-surface), 0.1);
   flex-shrink: 0;
 }
 
 /* ========================================
-   RIGHT PANEL - ENHANCED UX
+   APPLE-STYLE SIDEBAR PANEL
+   Native macOS sidebar aesthetics
    ======================================== */
 
 .right-panel {
-  border-left: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
+  @include apple-border(0.08);
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
   position: relative;
+  background: rgba(var(--v-theme-surface), 0.92);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
 
   &.is-resizing {
     transition: none !important;
@@ -4201,13 +4558,13 @@ SuperNavi - Plataforma de Patologia Digital
   }
 }
 
-/* Panel Resize Handle */
+// Panel Resize Handle
 .panel-resize-handle {
   position: absolute;
-  left: 0;
+  left: -3px;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 8px;
   cursor: col-resize;
   z-index: 10;
   display: flex;
@@ -4219,48 +4576,58 @@ SuperNavi - Plataforma de Patologia Digital
     .resize-handle-indicator {
       opacity: 1;
       background: rgb(var(--v-theme-primary));
+      height: 64px;
     }
   }
 }
 
 .resize-handle-indicator {
-  width: 3px;
-  height: 48px;
-  border-radius: 3px;
-  background: rgba(var(--v-theme-on-surface), 0.15);
+  width: 4px;
+  height: 40px;
+  border-radius: $apple-radius-pill;
+  background: rgba(var(--v-theme-on-surface), 0.12);
   opacity: 0;
-  transition: all 0.2s ease;
+  transition: all $apple-duration-normal $apple-spring;
 }
 
 .right-panel:hover .resize-handle-indicator {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-/* Panel Header & Tabs */
+// Panel Header & Tabs - Apple Segmented Control Style
 .panel-header {
-  background: rgba(var(--v-theme-surface-variant), 0.3);
+  background: transparent;
 }
 
 .panel-tabs {
+  :deep(.v-tabs) {
+    background: transparent;
+  }
+
   :deep(.v-tab) {
     text-transform: none;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     font-weight: 500;
     font-size: 13px;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 0;
+    padding: 0 14px;
+    transition: all $apple-duration-fast $apple-timing;
 
-    &:hover {
-      background: rgba(var(--v-theme-primary), 0.06);
+    &:hover:not(.v-tab--selected) {
+      background: rgba(var(--v-theme-on-surface), 0.04);
     }
 
     &.v-tab--selected {
       color: rgb(var(--v-theme-primary));
+      font-weight: 600;
     }
   }
 
   :deep(.v-tab__slider) {
-    height: 3px;
-    border-radius: 3px 3px 0 0;
+    height: 2.5px;
+    border-radius: $apple-radius-pill;
+    background: rgb(var(--v-theme-primary));
   }
 }
 
@@ -4268,7 +4635,7 @@ SuperNavi - Plataforma de Patologia Digital
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
 }
 
@@ -4276,15 +4643,15 @@ SuperNavi - Plataforma de Patologia Digital
   white-space: nowrap;
 }
 
-/* Panel Content Area */
+// Panel Content Area
 .panel-content {
-  height: calc(100vh - 56px - 64px); // Full height minus header and tabs
+  height: calc(100vh - 56px - 64px);
   overflow-y: auto;
   overflow-x: hidden;
 
-  /* Custom scrollbar */
+  // Apple-style scrollbar
   &::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
 
   &::-webkit-scrollbar-track {
@@ -4292,104 +4659,93 @@ SuperNavi - Plataforma de Patologia Digital
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(var(--v-theme-on-surface), 0.2);
-    border-radius: 3px;
+    background: rgba(var(--v-theme-on-surface), 0.15);
+    border-radius: $apple-radius-pill;
+    border: 2px solid transparent;
+    background-clip: padding-box;
 
     &:hover {
-      background: rgba(var(--v-theme-on-surface), 0.3);
+      background: rgba(var(--v-theme-on-surface), 0.25);
+      background-clip: padding-box;
     }
   }
 }
 
 .tab-content {
-  padding: 20px;
-  animation: tabFadeIn 0.3s ease-out;
+  padding: 16px 20px;
+  animation: appleTabIn $apple-duration-normal $apple-timing;
 }
 
-@keyframes tabFadeIn {
+@keyframes appleTabIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateX(8px);
   }
-
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 
-/* Section Headers */
+/* Section Headers - Apple Style */
 .section-header {
   display: flex;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 /* ========================================
-   LAYERS TAB STYLES
-   ======================================== */
-
-// Minimal overrides - using Vuetify defaults for performance
-
-/* ========================================
-   ANNOTATIONS TAB STYLES
+   APPLE-STYLE ANNOTATIONS LIST
+   iOS Settings-inspired cards
    ======================================== */
 
 .annotations-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .annotation-card {
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 10px;
+  background: rgba(var(--v-theme-surface-variant), 0.25);
+  @include apple-border(0.08);
+  border-radius: $apple-radius-md;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all $apple-duration-normal $apple-timing;
 
   &:hover {
-    background: rgba(var(--v-theme-surface-variant), 0.5);
-    border-color: rgba(var(--v-theme-primary), 0.2);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: rgba(var(--v-theme-surface-variant), 0.4);
+    border-color: rgba(var(--v-theme-primary), 0.15);
+    transform: translateY(-1px);
+    @include apple-shadow-sm;
   }
 
   &:active {
-    transform: translateY(0);
+    transform: scale(0.99);
+    background: rgba(var(--v-theme-primary), 0.08);
   }
 }
 
 .annotation-delete-btn {
   opacity: 0;
-  transition: all 0.2s ease;
+  transition: all $apple-duration-fast $apple-timing;
 
   .annotation-card:hover & {
-    opacity: 1;
+    opacity: 0.7;
   }
 
   &:hover {
-    background: rgba(var(--v-theme-error), 0.1);
+    opacity: 1 !important;
+    background: rgba(var(--v-theme-error), 0.12);
+    color: rgb(var(--v-theme-error));
   }
 }
 
 .empty-state {
-  border-radius: 10px;
-  animation: emptyStatePulse 0.5s ease-out;
-}
-
-@keyframes emptyStatePulse {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.8;
-  }
+  border-radius: $apple-radius-md;
+  background: rgba(var(--v-theme-surface-variant), 0.2);
+  padding: 24px 16px;
 }
 
 /* ========================================
@@ -4777,7 +5133,7 @@ SuperNavi - Plataforma de Patologia Digital
 .messages-container {
   flex: 1;
   overflow: hidden;
-  background: rgba(var(--v-theme-surface), 0.5);
+  background: rgb(var(--v-theme-surface));
 }
 
 .messages-scroll {
@@ -4786,21 +5142,149 @@ SuperNavi - Plataforma de Patologia Digital
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
-/* Message Wrapper */
-.message-wrapper {
+/* Message Item - New Design */
+.message-item {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  position: relative;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.03);
+
+    .message-actions {
+      opacity: 1;
+    }
+  }
 
   &.message-own {
-    align-items: flex-end;
+    .message-author-name {
+      color: rgb(var(--v-theme-primary));
+    }
+  }
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  .avatar-letter {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+  }
+}
+
+.message-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.message-author-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.2;
+}
+
+.message-datetime {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  white-space: nowrap;
+}
+
+.message-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.85);
+  word-wrap: break-word;
+}
+
+.message-edited-badge {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  font-style: italic;
+  margin-left: 4px;
+}
+
+/* Message Actions */
+.message-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.message-menu-btn {
+  background: rgb(var(--v-theme-surface));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.08);
+  }
+}
+
+.message-actions-menu {
+  min-width: 140px;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  .v-list-item {
+    min-height: 40px;
+    font-size: 13px;
+  }
+}
+
+/* Message Edit */
+.message-edit-container {
+  margin-top: 4px;
+}
+
+.message-edit-input {
+  :deep(.v-field) {
+    border-radius: 10px;
   }
 
-  &.message-ai {
-    align-items: flex-start;
+  :deep(.v-field__input) {
+    font-size: 14px;
+    line-height: 1.5;
   }
+}
+
+.message-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+/* Messages Empty State */
+.messages-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* Delete Dialog */
+.delete-message-dialog {
+  border-radius: 16px;
 }
 
 /* System Message */
@@ -4813,42 +5297,7 @@ SuperNavi - Plataforma de Patologia Digital
   border-radius: 20px;
   font-size: 11px;
   color: rgba(var(--v-theme-on-surface), 0.6);
-  align-self: center;
-}
-
-/* Message Bubble */
-.message-bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-surface-variant), 0.5);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-
-  &.own-bubble {
-    background: rgba(var(--v-theme-primary), 0.12);
-    border-color: rgba(var(--v-theme-primary), 0.15);
-    border-bottom-right-radius: 4px;
-  }
-
-  &.ai-bubble {
-    background: linear-gradient(135deg,
-        rgba(var(--v-theme-secondary), 0.08) 0%,
-        rgba(var(--v-theme-secondary), 0.15) 100%);
-    border-color: rgba(var(--v-theme-secondary), 0.2);
-    border-bottom-left-radius: 4px;
-  }
-}
-
-.message-author {
-  display: flex;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.author-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgb(var(--v-theme-on-surface));
+  margin: 8px auto;
 }
 
 .ai-badge {
@@ -5028,6 +5477,24 @@ SuperNavi - Plataforma de Patologia Digital
 /* ===========================================
    AI CASE CHAT PANEL
    =========================================== */
+
+.ai-coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 56px);
+  padding: 24px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.mobile-ai-coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
 
 .ai-chat-panel {
   display: flex;
@@ -5689,9 +6156,14 @@ SuperNavi - Plataforma de Patologia Digital
   padding-bottom: 56px !important; /* Space for bottom nav */
 }
 
-/* Mobile Bottom Navigation */
+/* ========================================
+   APPLE-STYLE MOBILE TAB BAR
+   iOS Tab Bar aesthetics
+   ======================================== */
 .mobile-bottom-nav {
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  @include apple-vibrancy(0.9);
+  border-top: 0.5px solid rgba(var(--v-theme-on-surface), 0.1);
+  @include apple-shadow-sm;
   overflow: visible !important;
 
   :deep(.v-bottom-navigation__content) {
@@ -5700,6 +6172,19 @@ SuperNavi - Plataforma de Patologia Digital
 
   :deep(.v-btn) {
     overflow: visible !important;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 10px;
+    letter-spacing: 0;
+    transition: all $apple-duration-fast $apple-timing;
+
+    &:active {
+      transform: scale(0.92);
+    }
+
+    .v-icon {
+      font-size: 24px;
+      margin-bottom: 2px;
+    }
   }
 
   :deep(.v-badge) {
@@ -5707,29 +6192,30 @@ SuperNavi - Plataforma de Patologia Digital
   }
 }
 
-/* Mobile Panel Bottom Sheet */
+/* Apple-Style Bottom Sheets */
 .mobile-panel-sheet {
   z-index: 2000 !important;
 }
 
 .mobile-panel-card {
-  border-radius: 16px 16px 0 0 !important;
-  max-height: 70vh;
+  border-radius: $apple-radius-xl $apple-radius-xl 0 0 !important;
+  max-height: 75vh;
   display: flex;
   flex-direction: column;
+  @include apple-vibrancy-heavy(0.96);
 }
 
 .sheet-handle {
-  padding: 8px 0 4px;
+  padding: 10px 0 6px;
   display: flex;
   justify-content: center;
 }
 
 .handle-bar {
-  width: 40px;
-  height: 4px;
+  width: 36px;
+  height: 5px;
   background: rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 2px;
+  border-radius: $apple-radius-pill;
 }
 
 .mobile-panel-content {
@@ -5865,6 +6351,14 @@ SuperNavi - Plataforma de Patologia Digital
   gap: 8px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.mobile-messages-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 60px;
 }
 
 .mobile-message {

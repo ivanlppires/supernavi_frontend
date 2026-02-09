@@ -66,6 +66,13 @@ export interface ViewerState {
   // Slide list for case
   slides: ViewerSlide[]
   activeSlideId: string
+  // Magnification metadata
+  appMag: number | null      // Native scan magnification (e.g., 20, 40)
+  mpp: number | null         // Microns per pixel
+  imageWidth: number         // Full image width in pixels
+  imageHeight: number        // Full image height in pixels
+  magnification: number      // Current optical magnification
+  isDigitalZoom: boolean     // True if zoomed beyond native resolution
 }
 
 export interface ViewerControls {
@@ -94,6 +101,7 @@ export interface ViewerControls {
   updateMouseCoords: (coords: { x: number, y: number } | null) => void
   updateTilesLoaded: (count: number) => void
   setSlideInfo: (caseName: string, slideName: string) => void
+  setMagnificationMetadata: (appMag: number | null, mpp: number | null, imageWidth: number, imageHeight: number) => void
 
   // ROI Methods
   setROIs: (rois: ROI[]) => void
@@ -106,6 +114,7 @@ export interface ViewerControls {
   handleROIClick: (roiId: number) => void
   onROIDelete: (callback: (roiId: number) => void) => void
   handleROIDelete: (roiId: number) => void
+  onROIMoved: (callback: (roiId: number, coordinates: ROICoordinates) => void) => void
 
   // Drawing Methods
   drawingState: Ref<DrawingState>
@@ -149,6 +158,13 @@ const state = ref<ViewerState>({
   showMarkers: true,
   slides: [],
   activeSlideId: '',
+  // Magnification state
+  appMag: null,
+  mpp: null,
+  imageWidth: 0,
+  imageHeight: 0,
+  magnification: 1,
+  isDigitalZoom: false,
 })
 
 // ROI click callback
@@ -156,6 +172,9 @@ let roiClickCallback: ((roiId: number) => void) | null = null
 
 // ROI delete callback
 let roiDeleteCallback: ((roiId: number) => void) | null = null
+
+// ROI moved callback
+let roiMovedCallback: ((roiId: number, coordinates: ROICoordinates) => void) | null = null
 
 // Drawing complete callback
 let drawingCompleteCallback: ((coordinates: ROICoordinates, type: 'rectangle' | 'arrow') => void) | null = null
@@ -260,12 +279,66 @@ export function useViewer (): ViewerControls {
   const updateZoom = (zoom: number) => {
     state.value.zoomLevel = Math.round(zoom * 10) / 10
 
-    // Calculate scale bar based on zoom
-    // This is a simplified calculation - you'll need to adjust based on your slide's MPP (microns per pixel)
-    const baseMicrons = 1000 // 1mm at zoom 1x
-    const currentMicrons = baseMicrons / zoom
+    // Calculate actual optical magnification if we have metadata
+    if (state.value.appMag && state.value.imageWidth && viewerInstance.value) {
+      // In OpenSeadragon, zoom = viewport width / image width (in normalized coords)
+      // At zoom 1, the full image fits in viewport width
+      // To calculate magnification:
+      // - Get the current viewport width in pixels (screen pixels)
+      // - Calculate how many image pixels are shown per screen pixel
+      // - magnification = appMag * (image pixels per screen pixel)
+      const viewport = viewerInstance.value.viewport
+      const containerWidth = viewerInstance.value.container.clientWidth
 
-    state.value.scaleBar = currentMicrons >= 1000 ? `${Math.round(currentMicrons / 1000)} mm` : `${Math.round(currentMicrons)} µm`
+      // Viewport zoom is relative to image fitting viewport
+      // At native (1:1 pixel) viewing, zoom = containerWidth / imageWidth
+      const zoomAtNative = containerWidth / state.value.imageWidth
+      const zoomRatio = zoom / zoomAtNative
+
+      // Current magnification = native mag * zoom ratio
+      const magnification = state.value.appMag * zoomRatio
+      state.value.magnification = Math.round(magnification * 10) / 10
+      state.value.isDigitalZoom = magnification > state.value.appMag
+    } else {
+      // Fallback if no metadata
+      state.value.magnification = state.value.zoomLevel
+      state.value.isDigitalZoom = false
+    }
+
+    // Calculate scale bar based on MPP if available
+    if (state.value.mpp && viewerInstance.value) {
+      const containerWidth = viewerInstance.value.container.clientWidth
+      // Pixels on screen for a fixed bar width (100px)
+      const barWidthPixels = 100
+      // How many image pixels does this represent?
+      const imagePixelsPerScreenPixel = state.value.imageWidth / (containerWidth * zoom)
+      const barWidthImagePixels = barWidthPixels * imagePixelsPerScreenPixel
+      // Convert to microns
+      const barMicrons = barWidthImagePixels * state.value.mpp
+
+      // Format scale bar
+      if (barMicrons >= 1000) {
+        state.value.scaleBar = `${Math.round(barMicrons / 100) / 10} mm`
+      } else if (barMicrons >= 1) {
+        state.value.scaleBar = `${Math.round(barMicrons)} µm`
+      } else {
+        state.value.scaleBar = `${Math.round(barMicrons * 1000)} nm`
+      }
+    } else {
+      // Fallback scale bar calculation
+      const baseMicrons = 1000
+      const currentMicrons = baseMicrons / zoom
+      state.value.scaleBar = currentMicrons >= 1000 ? `${Math.round(currentMicrons / 1000)} mm` : `${Math.round(currentMicrons)} µm`
+    }
+  }
+
+  // Set magnification metadata from slide/manifest
+  const setMagnificationMetadata = (appMag: number | null, mpp: number | null, imageWidth: number, imageHeight: number) => {
+    state.value.appMag = appMag
+    state.value.mpp = mpp
+    state.value.imageWidth = imageWidth
+    state.value.imageHeight = imageHeight
+    console.log(`[useViewer] Magnification metadata set: ${appMag}x, MPP: ${mpp}, size: ${imageWidth}x${imageHeight}`)
   }
 
   const updateMouseCoords = (coords: { x: number, y: number } | null) => {
@@ -335,6 +408,10 @@ export function useViewer (): ViewerControls {
       roi.id === roiId ? { ...roi, coordinates } : roi,
     )
     console.log('[useViewer] ROI coordinates updated:', roiId, coordinates)
+    // Call the callback if registered (for persisting to API)
+    if (roiMovedCallback) {
+      roiMovedCallback(roiId, coordinates)
+    }
   }
 
   const createROI = (data: Omit<ROI, 'id'>): ROI => {
@@ -408,6 +485,10 @@ export function useViewer (): ViewerControls {
     if (roiDeleteCallback) {
       roiDeleteCallback(roiId)
     }
+  }
+
+  const onROIMoved = (callback: (roiId: number, coordinates: ROICoordinates) => void) => {
+    roiMovedCallback = callback
   }
 
   // Measurement Methods
@@ -491,6 +572,7 @@ export function useViewer (): ViewerControls {
     updateMouseCoords,
     updateTilesLoaded,
     setSlideInfo,
+    setMagnificationMetadata,
     setROIs,
     goToROI,
     selectROI,
@@ -501,6 +583,7 @@ export function useViewer (): ViewerControls {
     handleROIClick,
     onROIDelete,
     handleROIDelete,
+    onROIMoved,
     drawingState,
     setDrawingMode,
     cancelDrawing,

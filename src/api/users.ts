@@ -41,4 +41,18 @@ export const usersApi = {
   async getUser (id: string): Promise<User> {
     return apiClient.get<User>(`/users/${id}`)
   },
+
+  /**
+   * Search users by email or name (for collaboration invites)
+   */
+  async search (query: string): Promise<Array<{
+    id: string
+    email: string
+    name: string
+    avatarUrl: string | null
+    specialization: string | null
+  }>> {
+    if (!query || query.length < 2) return []
+    return apiClient.get(`/users/search?q=${encodeURIComponent(query)}`)
+  },
 }

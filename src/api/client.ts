@@ -1,6 +1,9 @@
 import type { ApiError, ApiResponse } from './types'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://api.supernavi.app') + '/api'
+// Use empty string for local development (uses Vite proxy), or full URL for production
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL + '/api'
+  : '/api'
 
 const TOKEN_KEY = 'supernavi_token'
 
@@ -35,6 +38,10 @@ class ApiClient {
 
   patch<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PATCH', path, { body })
+  }
+
+  put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', path, { body })
   }
 
   delete<T>(path: string): Promise<T> {

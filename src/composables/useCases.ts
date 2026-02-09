@@ -18,6 +18,7 @@ export interface CaseDisplay extends Case {
   slidesCount?: number
   thumbnailUrl?: string | null
   inbox: CaseLocation
+  collaborators?: Array<{ id: string; name: string; avatarUrl: string | null }>
 }
 
 // Singleton state
@@ -33,11 +34,13 @@ export function useCases () {
   const authStore = useAuthStore()
 
   // Transform API case to display case
-  function transformCase (apiCase: Case): CaseDisplay {
+  function transformCase (apiCase: any): CaseDisplay {
     return {
       ...apiCase,
-      isOwner: apiCase.ownerId === authStore.user?.id,
+      // Use isOwner from API if available, otherwise compute from ownerId
+      isOwner: apiCase.isOwner ?? (apiCase.ownerId === authStore.user?.id),
       inbox: apiCase.location,
+      collaborators: apiCase.collaborators ?? [],
     }
   }
 

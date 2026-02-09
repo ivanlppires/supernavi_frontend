@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CaseCard: typeof import('./components/CaseCard.vue')['default']
     DziViewer: typeof import('./components/DziViewer.vue')['default']
     EdgeStatusBadge: typeof import('./components/EdgeStatusBadge.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
