@@ -337,9 +337,17 @@
                     />
                     <v-list-item
                       prepend-icon="mdi-account-plus"
-                      title="Convidar patologista"
-                      @click="openInviteDialog"
-                    />
+                      disabled
+                      @click.prevent
+                    >
+                      <v-list-item-title>
+                        Convidar patologista
+                        <v-chip class="ml-2" color="info" size="x-small" variant="tonal">Em breve</v-chip>
+                      </v-list-item-title>
+                      <v-tooltip activator="parent" location="bottom">
+                        Convite e colaboração entre patologistas estarão disponíveis na próxima versão.
+                      </v-tooltip>
+                    </v-list-item>
                     <v-list-item
                       :prepend-icon="selectedAnnotation.status === 'resolved' ? 'mdi-restore' : 'mdi-check-circle'"
                       :title="selectedAnnotation.status === 'resolved' ? 'Reabrir discussão' : 'Marcar como resolvido'"
