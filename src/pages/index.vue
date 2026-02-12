@@ -44,16 +44,6 @@
                 <span>Continuar com Google</span>
               </v-btn>
 
-              <v-btn
-                block
-                class="social-btn apple-btn"
-                height="48"
-                variant="outlined"
-                @click="loginWithApple"
-              >
-                <v-icon class="social-icon" size="20">mdi-apple</v-icon>
-                <span>Continuar com Apple</span>
-              </v-btn>
             </div>
 
             <!-- Divider -->
@@ -201,16 +191,6 @@
                 <span>Cadastrar com Google</span>
               </v-btn>
 
-              <v-btn
-                block
-                class="social-btn apple-btn"
-                height="48"
-                variant="outlined"
-                @click="loginWithApple"
-              >
-                <v-icon class="social-icon" size="20">mdi-apple</v-icon>
-                <span>Cadastrar com Apple</span>
-              </v-btn>
             </div>
 
             <!-- Divider -->
@@ -754,19 +734,6 @@
     } finally {
       isLoading.value = false
     }
-  }
-
-  async function loginWithApple () {
-    isLoading.value = true
-    // TODO: Implement Apple Sign-In SDK to get idToken
-    // For now, show a message that OAuth is not yet configured
-    console.log('Apple OAuth not yet implemented - requires Apple Sign-In SDK integration')
-    isLoading.value = false
-
-    // When implemented:
-    // const { idToken, user } = await appleSignIn.getIdToken()
-    // const success = await authStore.appleLogin(idToken, user?.name)
-    // if (success) { closeLoginDialog(); router.push('/dashboard') }
   }
 
   const features = [
@@ -1812,9 +1779,6 @@ $font-mono: 'JetBrains Mono', 'SF Mono', monospace;
     background: rgba(#4285F4, 0.08) !important;
   }
 
-  &.apple-btn:hover {
-    border-color: rgba($color-text, 0.4) !important;
-  }
 }
 
 .auth-divider {
