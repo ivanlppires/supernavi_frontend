@@ -60,41 +60,6 @@
 
           <v-divider class="my-1" />
 
-          <!-- Status Section -->
-          <div class="dropdown-header">
-            <span class="dropdown-title">Status do Caso</span>
-            <v-chip :color="reportStatusColor" size="x-small" variant="tonal">{{ reportStatusLabel }}</v-chip>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'novo' }"
-            @click="setReportStatus('novo')"
-          >
-            <v-icon :color="reportStatus === 'novo' ? 'warning' : undefined" size="18">mdi-new-box</v-icon>
-            <span>Novo</span>
-            <v-icon v-if="reportStatus === 'novo'" class="ml-auto" color="warning" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'em_analise' }"
-            @click="setReportStatus('em_analise')"
-          >
-            <v-icon :color="reportStatus === 'em_analise' ? 'info' : undefined" size="18">mdi-progress-clock</v-icon>
-            <span>Em Análise</span>
-            <v-icon v-if="reportStatus === 'em_analise'" class="ml-auto" color="info" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'concluido' }"
-            @click="setReportStatus('concluido')"
-          >
-            <v-icon :color="reportStatus === 'concluido' ? 'success' : undefined" size="18">mdi-check-circle</v-icon>
-            <span>Concluído</span>
-            <v-icon v-if="reportStatus === 'concluido'" class="ml-auto" color="success" size="14">mdi-check</v-icon>
-          </div>
-
-          <v-divider class="my-1" />
-
           <!-- Location Section -->
           <div class="dropdown-header">
             <span class="dropdown-title">Localização</span>
@@ -135,156 +100,6 @@
 
     </div>
 
-    <!-- Desktop Floating Case Name (Centered) with Case Menu and Slides Dropdown -->
-    <div v-if="!mobile && !focusMode" class="floating-case-container">
-      <!-- Case Menu -->
-      <v-menu :close-on-content-click="true" location="bottom start" offset="4">
-        <template #activator="{ props }">
-          <div v-bind="props" class="case-selector">
-            <v-icon class="case-icon" size="16">mdi-folder-open</v-icon>
-            <span class="case-name">{{ viewerControls.state.value.caseName || 'Nenhum caso' }}</span>
-            <v-icon class="chevron-icon" size="12">mdi-chevron-down</v-icon>
-          </div>
-        </template>
-
-        <div class="case-actions-dropdown">
-          <div class="dropdown-header">
-            <span class="dropdown-title">Status do Caso</span>
-            <v-chip :color="reportStatusColor" size="x-small" variant="tonal">
-              {{ reportStatusLabel }}
-            </v-chip>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'novo' }"
-            @click="setReportStatus('novo')"
-          >
-            <v-icon :color="reportStatus === 'novo' ? 'warning' : undefined" size="18">mdi-new-box</v-icon>
-            <span>Novo</span>
-            <v-icon v-if="reportStatus === 'novo'" class="ml-auto" color="warning" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'em_analise' }"
-            @click="setReportStatus('em_analise')"
-          >
-            <v-icon :color="reportStatus === 'em_analise' ? 'info' : undefined" size="18">mdi-progress-clock</v-icon>
-            <span>Em Análise</span>
-            <v-icon v-if="reportStatus === 'em_analise'" class="ml-auto" color="info" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': reportStatus === 'concluido' }"
-            @click="setReportStatus('concluido')"
-          >
-            <v-icon :color="reportStatus === 'concluido' ? 'success' : undefined" size="18">mdi-check-circle</v-icon>
-            <span>Concluído</span>
-            <v-icon v-if="reportStatus === 'concluido'" class="ml-auto" color="success" size="14">mdi-check</v-icon>
-          </div>
-
-          <v-divider class="my-1" />
-
-          <div class="dropdown-header">
-            <span class="dropdown-title">Localização</span>
-            <v-chip :color="caseLocationColor" size="x-small" variant="tonal">
-              {{ caseLocationLabel }}
-            </v-chip>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': caseLocation === 'inbox' }"
-            @click="caseLocation !== 'inbox' && moveCaseTo('inbox')"
-          >
-            <v-icon :color="caseLocation === 'inbox' ? 'primary' : undefined" size="18">mdi-inbox</v-icon>
-            <span>Caixa de Entrada</span>
-            <v-icon v-if="caseLocation === 'inbox'" class="ml-auto" color="primary" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{ 'case-action-item--active': caseLocation === 'archived' }"
-            @click="caseLocation !== 'archived' && moveCaseTo('archived')"
-          >
-            <v-icon :color="caseLocation === 'archived' ? 'secondary' : undefined" size="18">mdi-archive</v-icon>
-            <span>Arquivados</span>
-            <v-icon v-if="caseLocation === 'archived'" class="ml-auto" color="secondary" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            class="case-action-item"
-            :class="{
-              'case-action-item--active': caseLocation === 'trash',
-              'case-action-item--danger': caseLocation !== 'trash'
-            }"
-            @click="caseLocation !== 'trash' ? showTrashConfirm = true : null"
-          >
-            <v-icon :color="caseLocation === 'trash' ? 'error' : undefined" size="18">mdi-trash-can</v-icon>
-            <span>Lixeira</span>
-            <v-icon v-if="caseLocation === 'trash'" class="ml-auto" color="error" size="14">mdi-check</v-icon>
-          </div>
-          <div
-            v-if="caseLocation === 'trash'"
-            class="case-action-item case-action-item--danger"
-            @click="showDeleteConfirm = true"
-          >
-            <v-icon color="error" size="18">mdi-delete-forever</v-icon>
-            <span>Excluir Permanentemente</span>
-          </div>
-        </div>
-      </v-menu>
-
-      <v-divider class="mx-2 selector-divider" vertical />
-
-      <!-- Slides Menu -->
-      <v-menu :close-on-content-click="true" location="bottom end" offset="4">
-        <template #activator="{ props }">
-          <div v-bind="props" class="slide-selector">
-            <v-icon class="slide-icon" size="16">mdi-image-multiple</v-icon>
-            <span class="slide-name">{{ currentSlideName }}</span>
-            <v-icon class="chevron-icon" size="12">mdi-chevron-down</v-icon>
-          </div>
-        </template>
-
-        <div class="slides-dropdown">
-          <div class="dropdown-header">
-            <span class="dropdown-title">Lâminas do Caso</span>
-            <v-chip color="secondary" size="x-small" variant="tonal">
-              {{ caseSlides.length }}
-            </v-chip>
-          </div>
-          <v-divider />
-          <div
-            v-for="(slide, index) in caseSlides"
-            :key="slide.id"
-            class="slide-item"
-            :class="{ 'slide-item--active': slide.id === activeSlideId }"
-            @click="selectSlide(slide)"
-          >
-            <v-icon
-              class="slide-icon"
-              :color="slide.id === activeSlideId ? 'primary' : undefined"
-              size="18"
-            >
-              {{ slide.id === activeSlideId ? 'mdi-checkbox-marked-circle' : 'mdi-image-outline' }}
-            </v-icon>
-            <div class="slide-info">
-              <div class="slide-label-row">
-                <span class="slide-item-name">Lâmina {{ index + 1 }}</span>
-                <v-chip class="slide-stain-chip" size="x-small" variant="text">{{ slide.stain }}</v-chip>
-              </div>
-              <span class="slide-id-text">{{ slide.name }}</span>
-            </div>
-            <v-icon
-              v-if="slide.id === activeSlideId"
-              class="check-icon"
-              color="primary"
-              size="16"
-            >
-              mdi-check
-            </v-icon>
-          </div>
-        </div>
-      </v-menu>
-    </div>
-
     <!-- Right Panel (Desktop) - hidden in read-only mode -->
     <v-navigation-drawer
       v-if="!mobile && !isReadOnly.value"
@@ -292,7 +107,6 @@
       class="right-panel"
       :class="{ 'is-resizing': isResizingPanel }"
       location="right"
-      permanent
       :width="rightPanelWidth"
     >
       <!-- Resize Handle -->
@@ -300,20 +114,29 @@
         <div class="resize-handle-indicator" />
       </div>
 
-      <v-tabs v-model="activeTab" color="primary" height="56" show-arrows>
-        <v-tab prepend-icon="mdi-map-marker" value="annotations">
-          <span class="tab-label">Notas</span>
-        </v-tab>
-        <v-tab prepend-icon="mdi-robot" value="ai">
-          <span class="tab-label">IA</span>
-        </v-tab>
-        <v-tab prepend-icon="mdi-file-document-edit" value="report">
-          <span class="tab-label">Laudo</span>
-        </v-tab>
-        <v-tab prepend-icon="mdi-information" value="details">
-          <span class="tab-label">Detalhes</span>
-        </v-tab>
-      </v-tabs>
+      <div class="panel-tabs-row">
+        <v-tabs v-model="activeTab" class="panel-tabs-grow" color="primary" height="56" show-arrows>
+          <v-tab prepend-icon="mdi-information" value="info">
+            <span class="tab-label">Info</span>
+          </v-tab>
+          <v-tab prepend-icon="mdi-map-marker" value="annotations">
+            <span class="tab-label">Notas</span>
+          </v-tab>
+          <v-tab prepend-icon="mdi-robot" value="ai">
+            <span class="tab-label">IA</span>
+          </v-tab>
+        </v-tabs>
+        <v-btn
+          class="panel-close-btn"
+          icon
+          size="x-small"
+          variant="text"
+          @click="rightPanel = false"
+        >
+          <v-icon size="18">mdi-chevron-right</v-icon>
+          <v-tooltip activator="parent" location="bottom">Fechar Painel</v-tooltip>
+        </v-btn>
+      </div>
       <v-tabs-window v-model="activeTab">
         <!-- Annotations Section -->
         <v-tabs-window-item value="annotations">
@@ -748,219 +571,111 @@
           </div>
         </v-tabs-window-item>
 
-        <!-- Report Section (Laudo) -->
-        <v-tabs-window-item value="report">
-          <div class="report-panel">
-            <!-- Report Header -->
-            <div class="report-header px-4 py-3">
-              <div class="d-flex align-center justify-space-between">
-                <div class="d-flex align-center ga-2">
-                  <v-icon color="primary" size="20">mdi-file-document-edit</v-icon>
-                  <span class="text-subtitle-2 font-weight-medium">Laudo do Caso</span>
-                </div>
-                <v-chip
-                  :color="reportStatusColor"
-                  size="small"
-                  variant="tonal"
-                >
-                  {{ reportStatusLabel }}
-                </v-chip>
+        <!-- Info Section -->
+        <v-tabs-window-item value="info">
+          <div class="info-panel">
+            <!-- User -->
+            <div class="info-user-card">
+              <v-avatar :color="authStore.user?.avatar ? undefined : 'primary'" size="36">
+                <v-img v-if="authStore.user?.avatar" cover :src="authStore.user.avatar" />
+                <span v-else class="text-caption font-weight-bold">{{ authStore.userInitials }}</span>
+              </v-avatar>
+              <div class="info-user-text">
+                <span class="info-user-name">{{ authStore.userName }}</span>
+                <span class="info-user-role">{{ authStore.user?.specialization || 'Patologista' }}</span>
               </div>
             </div>
 
             <v-divider />
 
-            <!-- Report Form -->
-            <div class="report-form-scroll">
-              <div class="report-form pa-4">
-                <!-- AI Suggestion -->
-                <div v-if="viewerControls.state.value.caseName" class="ai-suggestion-card mb-4">
-                  <div class="d-flex align-center ga-2 mb-2">
-                    <v-icon color="accent" size="18">mdi-robot</v-icon>
-                    <span class="text-caption font-weight-medium">Sugestão da IA</span>
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis ai-suggestion-text">
-                    {{ aiSuggestion.diagnosis || 'Analisando características morfológicas... A IA gerará uma sugestão após análise completa das lâminas.' }}
-                  </p>
-                  <v-btn
-                    v-if="aiSuggestion.diagnosis"
-                    class="mt-2"
-                    color="accent"
-                    size="small"
-                    variant="text"
-                    @click="applyAiSuggestion"
-                  >
-                    <v-icon class="mr-1" size="16">mdi-magic-staff</v-icon>
-                    Usar como base
-                  </v-btn>
+            <!-- Caso -->
+            <div class="info-section">
+              <div class="info-section-header">
+                <v-icon color="primary" size="18">mdi-folder-open</v-icon>
+                <span class="info-section-title">Caso</span>
+              </div>
+              <div class="info-case-name">{{ viewerControls.state.value.caseName || 'Nenhum caso' }}</div>
+
+              <!-- Patient Data (from PathoWeb) -->
+              <div v-if="patientData" class="info-patient-data mt-2">
+                <div v-if="patientData.patientName" class="info-patient-row">
+                  <span class="info-patient-label">Paciente</span>
+                  <span class="info-patient-value">{{ patientData.patientName }}</span>
                 </div>
+                <div v-if="patientData.patientId" class="info-patient-row">
+                  <span class="info-patient-label">ID</span>
+                  <span class="info-patient-value">{{ patientData.patientId }}</span>
+                </div>
+                <div v-if="patientData.age" class="info-patient-row">
+                  <span class="info-patient-label">Idade</span>
+                  <span class="info-patient-value">{{ patientData.age }} anos</span>
+                </div>
+                <div v-if="patientData.doctor" class="info-patient-row">
+                  <span class="info-patient-label">Solicitante</span>
+                  <span class="info-patient-value">{{ patientData.doctor }}</span>
+                </div>
+              </div>
 
-                <!-- Microscopic Description -->
-                <v-textarea
-                  v-model="reportForm.microscopicDescription"
-                  auto-grow
-                  class="mb-4"
-                  hide-details
-                  label="Descrição Microscópica"
-                  placeholder="Descreva os achados microscópicos observados nas lâminas..."
-                  rows="3"
-                  variant="outlined"
-                />
-
-                <!-- Main Diagnosis -->
-                <v-textarea
-                  v-model="reportForm.diagnosis"
-                  auto-grow
-                  class="mb-4"
-                  hide-details
-                  label="Diagnóstico Principal"
-                  placeholder="Ex: Adenocarcinoma moderadamente diferenciado"
-                  rows="2"
-                  variant="outlined"
-                />
-
-                <!-- Conclusion -->
-                <v-textarea
-                  v-model="reportForm.conclusion"
-                  auto-grow
-                  class="mb-4"
-                  hide-details
-                  label="Conclusão"
-                  placeholder="Conclusão diagnóstica detalhada..."
-                  rows="3"
-                  variant="outlined"
-                />
-
-                <!-- Additional Notes -->
-                <v-textarea
-                  v-model="reportForm.notes"
-                  auto-grow
-                  class="mb-4"
-                  hide-details
-                  label="Observações Adicionais (opcional)"
-                  placeholder="Notas, recomendações ou informações complementares..."
-                  rows="2"
-                  variant="outlined"
-                />
-
-                <!-- Request Additional Exams -->
-                <v-checkbox
-                  v-model="reportForm.requestAdditionalExams"
-                  color="warning"
-                  density="compact"
-                  hide-details
-                  label="Solicitar exames complementares"
-                />
-
-                <v-expand-transition>
-                  <div v-if="reportForm.requestAdditionalExams" class="mt-2 mb-4">
-                    <v-textarea
-                      v-model="reportForm.additionalExamsDetails"
-                      auto-grow
-                      hide-details
-                      label="Quais exames?"
-                      placeholder="Descreva os exames complementares necessários..."
-                      rows="2"
-                      variant="outlined"
-                    />
-                  </div>
-                </v-expand-transition>
+              <!-- Mini Access Log -->
+              <div v-if="accessLog.length > 0" class="info-access-log mt-3">
+                <div v-for="entry in accessLog" :key="entry.id" class="info-log-entry">
+                  <v-avatar :color="entry.avatar ? undefined : 'grey'" size="20">
+                    <v-img v-if="entry.avatar" cover :src="entry.avatar" />
+                    <span v-else style="font-size: 9px; font-weight: 700;">{{ entry.initials }}</span>
+                  </v-avatar>
+                  <span class="info-log-text">{{ entry.name }}</span>
+                  <span class="info-log-time">{{ entry.time }}</span>
+                </div>
               </div>
             </div>
 
-            <!-- Report Actions -->
-            <div class="report-export-actions pa-4">
-              <!-- Conclude Report Button (when not concluded) -->
-              <template v-if="reportStatus !== 'concluido'">
-                <v-btn
-                  block
-                  color="success"
-                  :disabled="!canConcludeReport"
-                  prepend-icon="mdi-check-decagram"
-                  size="large"
-                  variant="elevated"
-                  @click="concludeReport"
-                >
-                  Concluir Laudo
-                </v-btn>
-                <p v-if="!canConcludeReport" class="text-caption text-center text-medium-emphasis mt-2">
-                  Preencha a descrição e o diagnóstico para concluir
-                </p>
-              </template>
+            <v-divider />
 
-              <!-- Update Report Button (when concluded but has changes) -->
-              <template v-else-if="reportHasUnsavedChanges">
-                <v-btn
-                  block
-                  color="primary"
-                  prepend-icon="mdi-content-save-check"
-                  size="large"
-                  variant="elevated"
-                  @click="updateReport"
-                >
-                  Atualizar Laudo
-                </v-btn>
-                <p class="text-caption text-center text-medium-emphasis mt-2">
-                  Você fez alterações no laudo concluído
-                </p>
-              </template>
+            <!-- Lâmina atual -->
+            <div class="info-section">
+              <div class="info-section-header">
+                <v-icon color="primary" size="18">mdi-microscope</v-icon>
+                <span class="info-section-title">Lâmina</span>
+              </div>
 
-              <!-- Export Options (when concluded and no changes) -->
-              <template v-else>
-                <div class="concluded-badge mb-3">
-                  <v-icon color="success" size="18">mdi-check-decagram</v-icon>
-                  <span>Laudo Concluído</span>
-                </div>
-                <div class="text-overline text-medium-emphasis mb-3">Exportar Laudo</div>
-                <div class="d-flex ga-2">
-                  <v-btn
-                    class="flex-grow-1"
-                    color="primary"
-                    prepend-icon="mdi-file-pdf-box"
-                    variant="tonal"
-                    @click="exportReportPdf"
-                  >
-                    PDF
-                  </v-btn>
-                  <v-btn
-                    class="flex-grow-1"
-                    prepend-icon="mdi-file-word"
-                    variant="tonal"
-                    @click="exportReportDoc"
-                  >
-                    DOC
-                  </v-btn>
-                  <v-btn
-                    class="flex-grow-1"
-                    prepend-icon="mdi-printer"
-                    variant="tonal"
-                    @click="printReport"
-                  >
-                    Imprimir
-                  </v-btn>
-                </div>
-              </template>
+              <!-- Combobox para trocar lâmina -->
+              <v-select
+                v-if="caseSlides.length > 1"
+                class="info-slide-select mb-3"
+                density="compact"
+                hide-details
+                :item-title="slideSelectTitle"
+                item-value="id"
+                :items="caseSlides"
+                :model-value="activeSlideId"
+                variant="outlined"
+                @update:model-value="onSlideSelectChange"
+              >
+                <template #prepend-inner>
+                  <v-icon color="primary" size="18">mdi-image-outline</v-icon>
+                </template>
+              </v-select>
+
+              <!-- Label da lâmina quando só tem uma -->
+              <div v-else class="info-slide-single mb-3">
+                <v-icon color="primary" size="16">mdi-image-outline</v-icon>
+                <span>{{ currentSlideLabel }}</span>
+              </div>
+
+              <!-- Slide Details -->
+              <div class="details-card">
+                <template v-for="(detail, index) in slideDetails" :key="detail.label">
+                  <div class="detail-item">
+                    <div class="detail-row">
+                      <span class="detail-label text-caption text-medium-emphasis">{{ detail.label }}</span>
+                      <span class="detail-value text-body-2 font-weight-medium">{{ detail.value }}</span>
+                    </div>
+                  </div>
+                  <v-divider v-if="index < slideDetails.length - 1" />
+                </template>
+              </div>
             </div>
           </div>
-        </v-tabs-window-item>
-
-        <!-- Details Section -->
-        <v-tabs-window-item value="details">
-          <v-container>
-            <div class="text-overline text-medium-emphasis mb-3">Informações da Lâmina</div>
-
-            <div class="details-card">
-              <template v-for="(detail, index) in slideDetails" :key="detail.label">
-                <div class="detail-item">
-                  <div class="detail-row">
-                    <span class="detail-label text-caption text-medium-emphasis">{{ detail.label }}</span>
-                    <span class="detail-value text-body-2 font-weight-medium">{{ detail.value }}</span>
-                  </div>
-                </div>
-                <v-divider v-if="index < slideDetails.length - 1" />
-              </template>
-            </div>
-          </v-container>
         </v-tabs-window-item>
       </v-tabs-window>
 
@@ -982,6 +697,10 @@
           grow
           height="48"
         >
+          <v-tab value="info">
+            <v-icon size="20">mdi-information</v-icon>
+            <span class="ml-1 text-caption">Info</span>
+          </v-tab>
           <v-tab value="annotations">
             <v-icon size="20">mdi-map-marker</v-icon>
             <span class="ml-1 text-caption">Notas</span>
@@ -989,14 +708,6 @@
           <v-tab value="ai">
             <v-icon size="20">mdi-robot</v-icon>
             <span class="ml-1 text-caption">IA</span>
-          </v-tab>
-          <v-tab value="report">
-            <v-icon size="20">mdi-file-document-edit</v-icon>
-            <span class="ml-1 text-caption">Laudo</span>
-          </v-tab>
-          <v-tab value="details">
-            <v-icon size="20">mdi-information</v-icon>
-            <span class="ml-1 text-caption">Detalhes</span>
           </v-tab>
         </v-tabs>
 
@@ -1133,128 +844,29 @@
               </div>
             </v-tabs-window-item>
 
-            <!-- Mobile Report (Laudo) -->
-            <v-tabs-window-item value="report">
-              <div class="mobile-report pa-3">
-                <!-- AI Suggestion compact -->
-                <div class="mobile-ai-suggestion mb-3">
-                  <div class="d-flex align-center justify-space-between mb-1">
-                    <div class="d-flex align-center ga-1">
-                      <v-icon color="accent" size="16">mdi-robot</v-icon>
-                      <span class="text-caption font-weight-medium">Sugestão IA</span>
-                    </div>
-                    <v-btn
-                      v-if="aiSuggestion.diagnosis"
-                      color="accent"
-                      size="x-small"
-                      variant="text"
-                      @click="applyAiSuggestion"
-                    >
-                      <v-icon class="mr-1" size="14">mdi-magic-staff</v-icon>
-                      Usar
-                    </v-btn>
-                  </div>
-                  <p class="text-caption text-medium-emphasis">
-                    {{ aiSuggestion.diagnosis || 'Aguardando análise...' }}
-                  </p>
-                </div>
-
-                <v-textarea
-                  v-model="reportForm.microscopicDescription"
-                  auto-grow
-                  class="mb-3"
-                  density="compact"
-                  hide-details
-                  label="Descrição Microscópica"
-                  rows="2"
-                  variant="outlined"
-                />
-
-                <v-textarea
-                  v-model="reportForm.diagnosis"
-                  auto-grow
-                  class="mb-3"
-                  density="compact"
-                  hide-details
-                  label="Diagnóstico"
-                  rows="2"
-                  variant="outlined"
-                />
-
-                <v-textarea
-                  v-model="reportForm.conclusion"
-                  auto-grow
-                  class="mb-3"
-                  density="compact"
-                  hide-details
-                  label="Conclusão"
-                  rows="2"
-                  variant="outlined"
-                />
-
-                <!-- Conclude/Update/Export Actions -->
-                <div class="mobile-report-actions">
-                  <!-- Conclude Report Button (when not concluded) -->
-                  <template v-if="reportStatus !== 'concluido'">
-                    <v-btn
-                      block
-                      color="success"
-                      :disabled="!canConcludeReport"
-                      size="small"
-                      @click="concludeReport"
-                    >
-                      <v-icon class="mr-1" size="16">mdi-check-decagram</v-icon>
-                      Concluir Laudo
-                    </v-btn>
-                    <p v-if="!canConcludeReport" class="text-caption text-center text-medium-emphasis mt-1">
-                      Preencha descrição e diagnóstico
-                    </p>
-                  </template>
-
-                  <!-- Update Report Button (when concluded but has changes) -->
-                  <template v-else-if="reportHasUnsavedChanges">
-                    <v-btn
-                      block
-                      color="primary"
-                      size="small"
-                      @click="updateReport"
-                    >
-                      <v-icon class="mr-1" size="16">mdi-content-save-check</v-icon>
-                      Atualizar Laudo
-                    </v-btn>
-                  </template>
-
-                  <!-- Export Options (when concluded and no changes) -->
-                  <template v-else>
-                    <div class="mobile-concluded-badge mb-2">
-                      <v-icon color="success" size="16">mdi-check-decagram</v-icon>
-                      <span>Laudo Concluído</span>
-                    </div>
-                    <div class="d-flex ga-2">
-                      <v-btn
-                        class="flex-grow-1"
-                        color="primary"
-                        size="small"
-                        variant="tonal"
-                        @click="exportReportPdf"
-                      >
-                        <v-icon size="16">mdi-file-pdf-box</v-icon>
-                      </v-btn>
-                      <v-btn class="flex-grow-1" size="small" variant="tonal" @click="exportReportDoc">
-                        <v-icon size="16">mdi-file-word</v-icon>
-                      </v-btn>
-                      <v-btn class="flex-grow-1" size="small" variant="tonal" @click="printReport">
-                        <v-icon size="16">mdi-printer</v-icon>
-                      </v-btn>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </v-tabs-window-item>
-
-            <!-- Mobile Details -->
-            <v-tabs-window-item value="details">
+            <!-- Mobile Info -->
+            <v-tabs-window-item value="info">
               <div class="mobile-details pa-3">
+                <div class="info-case-name mb-3">{{ viewerControls.state.value.caseName || 'Nenhum caso' }}</div>
+
+                <!-- Slide switcher -->
+                <v-select
+                  v-if="caseSlides.length > 1"
+                  class="info-slide-select mb-3"
+                  density="compact"
+                  hide-details
+                  :item-title="slideSelectTitle"
+                  item-value="id"
+                  :items="caseSlides"
+                  :model-value="activeSlideId"
+                  variant="outlined"
+                  @update:model-value="onSlideSelectChange"
+                >
+                  <template #prepend-inner>
+                    <v-icon color="primary" size="18">mdi-image-outline</v-icon>
+                  </template>
+                </v-select>
+
                 <div v-for="detail in slideDetails.slice(0, 6)" :key="detail.label" class="mobile-detail-item">
                   <span class="detail-label">{{ detail.label }}</span>
                   <span class="detail-value">{{ detail.value }}</span>
@@ -1974,7 +1586,7 @@
   // State Management
   const rightPanel = ref(!mobile.value) // Closed by default on mobile
   const focusMode = ref(false) // Ultra-minimal focus mode
-  const activeTab = ref('annotations')
+  const activeTab = ref('info')
   const activeTool = ref('pan')
 
   // Mobile-specific state
@@ -1984,241 +1596,6 @@
   const isFullscreen = ref(false)
   const showToolbar = ref(true)
 
-  // ===========================================
-  // REPORT (LAUDO) STATE
-  // ===========================================
-  interface ReportForm {
-    microscopicDescription: string
-    diagnosis: string
-    conclusion: string
-    notes: string
-    requestAdditionalExams: boolean
-    additionalExamsDetails: string
-  }
-
-  const reportForm = ref<ReportForm>({
-    microscopicDescription: '',
-    diagnosis: '',
-    conclusion: '',
-    notes: '',
-    requestAdditionalExams: false,
-    additionalExamsDetails: '',
-  })
-
-  type ReportStatusType = 'novo' | 'em_analise' | 'concluido'
-  const reportStatus = ref<ReportStatusType>('novo')
-  const reportHasUnsavedChanges = ref(false)
-
-  // Watch for changes in reportForm when report is concluded
-  watch(reportForm, () => {
-    if (reportStatus.value === 'concluido') {
-      reportHasUnsavedChanges.value = true
-    }
-  }, { deep: true })
-
-  const reportStatusLabel = computed(() => {
-    switch (reportStatus.value) {
-      case 'novo': { return 'Novo'
-      }
-      case 'em_analise': { return 'Em Análise'
-      }
-      case 'concluido': { return 'Concluído'
-      }
-      default: { return 'Novo'
-      }
-    }
-  })
-
-  const reportStatusColor = computed(() => {
-    switch (reportStatus.value) {
-      case 'novo': { return 'warning'
-      }
-      case 'em_analise': { return 'info'
-      }
-      case 'concluido': { return 'success'
-      }
-      default: { return 'warning'
-      }
-    }
-  })
-
-  const canConcludeReport = computed(() => {
-    return reportForm.value.microscopicDescription.trim().length > 0 && reportForm.value.diagnosis.trim().length > 0
-  })
-
-  function setReportStatus (status: ReportStatusType) {
-    reportStatus.value = status
-    console.log(`[Report] Status changed to ${status}`)
-  }
-
-  function concludeReport () {
-    if (!canConcludeReport.value) return
-    setReportStatus('concluido')
-    reportHasUnsavedChanges.value = false
-    console.log('[Report] Report concluded')
-  }
-
-  function updateReport () {
-    reportHasUnsavedChanges.value = false
-    console.log('[Report] Report updated:', reportForm.value)
-    // TODO: Save to backend
-  }
-
-  const aiSuggestion = ref({
-    microscopicDescription: 'Fragmento de pele exibindo epiderme com acantose irregular, alongamento e fusão de cones epiteliais. Na derme papilar e reticular superior, observa-se proliferação melanocítica atípica com padrão pagetoide, núcleos hipercromáticos e pleomórficos.',
-    diagnosis: 'Melanoma maligno extensivo superficial, nível de Clark III, espessura de Breslow 0,8mm. Índice mitótico: 2/mm². Sem ulceração. Sem invasão angiolinfática.',
-    conclusion: 'Achados morfológicos compatíveis com melanoma maligno extensivo superficial em fase de crescimento radial com microinvasão. Margens cirúrgicas livres de neoplasia. Recomenda-se estadiamento clínico completo e discussão em equipe multidisciplinar.',
-  })
-
-  const canSubmitReport = computed(() => {
-    return reportForm.value.diagnosis.trim().length > 0
-      && reportForm.value.conclusion.trim().length > 0
-  })
-
-  function applyAiSuggestion () {
-    if (aiSuggestion.value) {
-      reportForm.value.microscopicDescription = aiSuggestion.value.microscopicDescription
-      reportForm.value.diagnosis = aiSuggestion.value.diagnosis
-      reportForm.value.conclusion = aiSuggestion.value.conclusion
-    }
-  }
-
-  function saveDraft () {
-    if (reportStatus.value === 'novo') {
-      reportStatus.value = 'em_analise'
-    }
-    console.log('[Report] Draft saved:', reportForm.value)
-    // TODO: Save to backend
-  }
-
-  function submitReportForReview () {
-    if (!canSubmitReport.value) return
-    reportStatus.value = 'em_analise'
-    console.log('[Report] Submitted for review:', reportForm.value)
-    // TODO: Submit to backend and navigate back to dashboard
-  }
-
-  function exportReportPdf () {
-    const content = `
-LAUDO ANATOMOPATOLÓGICO
-========================
-Caso: ${viewerControls.state.value.caseName || 'N/A'}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-
-DESCRIÇÃO MICROSCÓPICA
-${reportForm.value.microscopicDescription || 'Não informado'}
-
-DIAGNÓSTICO
-${reportForm.value.diagnosis || 'Não informado'}
-
-CONCLUSÃO
-${reportForm.value.conclusion || 'Não informado'}
-
-OBSERVAÇÕES
-${reportForm.value.notes || 'Nenhuma'}
-
-${reportForm.value.requestAdditionalExams ? `EXAMES COMPLEMENTARES SOLICITADOS\n${reportForm.value.additionalExamsDetails}` : ''}
-
----
-SuperNavi - Plataforma de Patologia Digital
-    `.trim()
-
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `laudo-${viewerControls.state.value.caseName || 'caso'}-${new Date().toISOString().split('T')[0]}.txt`
-    document.body.append(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-    console.log('[Report] Exported as PDF (simulated as TXT)')
-  }
-
-  function exportReportDoc () {
-    const content = `
-LAUDO ANATOMOPATOLÓGICO
-
-Caso: ${viewerControls.state.value.caseName || 'N/A'}
-Data: ${new Date().toLocaleDateString('pt-BR')}
-
-DESCRIÇÃO MICROSCÓPICA
-${reportForm.value.microscopicDescription || 'Não informado'}
-
-DIAGNÓSTICO
-${reportForm.value.diagnosis || 'Não informado'}
-
-CONCLUSÃO
-${reportForm.value.conclusion || 'Não informado'}
-
-OBSERVAÇÕES
-${reportForm.value.notes || 'Nenhuma'}
-
-${reportForm.value.requestAdditionalExams ? `EXAMES COMPLEMENTARES SOLICITADOS\n${reportForm.value.additionalExamsDetails}` : ''}
-
----
-SuperNavi - Plataforma de Patologia Digital
-    `.trim()
-
-    const blob = new Blob([content], { type: 'application/msword' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `laudo-${viewerControls.state.value.caseName || 'caso'}-${new Date().toISOString().split('T')[0]}.doc`
-    document.body.append(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-    console.log('[Report] Exported as DOC')
-  }
-
-  function printReport () {
-    const content = `
-      <html>
-      <head>
-        <title>Laudo - ${viewerControls.state.value.caseName || 'Caso'}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-          h1 { color: #2C5F8D; border-bottom: 2px solid #2C5F8D; padding-bottom: 10px; }
-          h2 { color: #4A90A4; margin-top: 24px; }
-          p { line-height: 1.6; }
-          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <h1>LAUDO ANATOMOPATOLÓGICO</h1>
-        <p><strong>Caso:</strong> ${viewerControls.state.value.caseName || 'N/A'}</p>
-        <p><strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')}</p>
-
-        <h2>Descrição Microscópica</h2>
-        <p>${reportForm.value.microscopicDescription || 'Não informado'}</p>
-
-        <h2>Diagnóstico</h2>
-        <p>${reportForm.value.diagnosis || 'Não informado'}</p>
-
-        <h2>Conclusão</h2>
-        <p>${reportForm.value.conclusion || 'Não informado'}</p>
-
-        <h2>Observações</h2>
-        <p>${reportForm.value.notes || 'Nenhuma'}</p>
-
-        ${reportForm.value.requestAdditionalExams ? `<h2>Exames Complementares Solicitados</h2><p>${reportForm.value.additionalExamsDetails}</p>` : ''}
-
-        <div class="footer">
-          SuperNavi - Plataforma de Patologia Digital
-        </div>
-      </body>
-      </html>
-    `
-
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(content)
-      printWindow.document.close()
-      printWindow.print()
-    }
-    console.log('[Report] Print dialog opened')
-  }
 
   // Case Slides - Using shared state from composable
   // The page sets slides via viewerControls.setSlides() after loading from API
@@ -2260,6 +1637,36 @@ SuperNavi - Plataforma de Patologia Digital
     console.log('[Layout] Selected slide:', slide.name)
     // The page will handle loading the new tile source via onSlideChange callback
   }
+
+  // Slide select helpers for v-select combobox
+  function slideSelectTitle (slide: { id: string, name: string, stain: string }) {
+    const idx = caseSlides.value.findIndex(s => s.id === slide.id) + 1
+    return `Lâmina ${idx} · ${slide.name}`
+  }
+
+  function onSlideSelectChange (slideId: string) {
+    const slide = caseSlides.value.find(s => s.id === slideId)
+    if (slide) selectSlide(slide)
+  }
+
+  // Patient data from extension (via magic link JWT)
+  const patientData = computed(() => viewerControls.state.value.patientData)
+
+  // Mini access log (who accessed this case recently)
+  const accessLog = computed(() => {
+    const entries = []
+    // Current user always first
+    if (authStore.user) {
+      entries.push({
+        id: authStore.user.id,
+        name: authStore.user.name || 'Você',
+        avatar: authStore.user.avatar,
+        initials: (authStore.user.name || 'U').slice(0, 2).toUpperCase(),
+        time: 'agora',
+      })
+    }
+    return entries
+  })
 
   // Delete confirmation dialog
   const deleteDialog = ref(false)
@@ -2983,19 +2390,44 @@ SuperNavi - Plataforma de Patologia Digital
     return len > 0 ? annotation.messages[len - 1] : undefined
   }
 
-  // Details State
-  const slideDetails = ref([
-    { label: 'Case ID', value: '12345' },
-    { label: 'Patient ID', value: 'PT-2024-00892' },
-    { label: 'Stain', value: 'H&E (Hematoxylin & Eosin)' },
-    { label: 'Organ', value: 'Liver' },
-    { label: 'Magnification', value: '40x' },
-    { label: 'Scanner', value: 'Aperio AT2' },
-    { label: 'Scan Date', value: '2026-01-01 10:30 AM' },
-    { label: 'Resolution', value: '0.25 µm/pixel' },
-    { label: 'Dimensions', value: '120,000 x 80,000 px' },
-    { label: 'File Size', value: '2.4 GB' },
-  ])
+  // Slide details — built from real metadata
+  const slideDetails = computed(() => {
+    const s = viewerControls.state.value
+    const meta = s.slideMetadata
+    const details: { label: string, value: string }[] = []
+
+    if (meta?.originalFilename) {
+      details.push({ label: 'Arquivo', value: meta.originalFilename })
+    }
+    if (meta?.fileFormat) {
+      details.push({ label: 'Formato', value: meta.fileFormat.toUpperCase() })
+    }
+    if (s.imageWidth && s.imageHeight) {
+      details.push({ label: 'Dimensões', value: `${s.imageWidth.toLocaleString('pt-BR')} x ${s.imageHeight.toLocaleString('pt-BR')} px` })
+    }
+    if (s.appMag) {
+      details.push({ label: 'Magnificação', value: `${s.appMag}x` })
+    }
+    if (s.mpp) {
+      details.push({ label: 'Resolução', value: `${s.mpp} µm/pixel` })
+    }
+    if (meta?.fileSize && meta.fileSize !== '0') {
+      details.push({ label: 'Tamanho', value: formatFileSize(meta.fileSize) })
+    }
+    if (meta?.uploadedAt) {
+      details.push({ label: 'Recebido em', value: new Date(meta.uploadedAt).toLocaleString('pt-BR') })
+    }
+
+    return details
+  })
+
+  function formatFileSize (raw: string): string {
+    const bytes = Number(raw)
+    if (isNaN(bytes) || bytes === 0) return raw
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`
+  }
 
   // Toolbar Auto-hide
   let toolbarTimeout: ReturnType<typeof setTimeout> | null = null
@@ -3691,127 +3123,6 @@ $apple-duration-slow: 0.4s;
   flex-shrink: 0;
 }
 
-/* ========================================
-   APPLE-STYLE FLOATING CASE SELECTOR
-   Signature pill design with vibrancy
-   ======================================== */
-.floating-case-container {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  @include apple-vibrancy-heavy(0.78);
-  @include apple-border(0.12);
-  border-radius: $apple-radius-pill;
-  @include apple-shadow-md;
-  padding: 5px 8px;
-
-  // Signature inner glow
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      transparent 50%
-    );
-    pointer-events: none;
-  }
-
-  // Hover lift effect
-  transition: transform $apple-duration-normal $apple-timing,
-              box-shadow $apple-duration-normal $apple-timing;
-
-  &:hover {
-    transform: translateX(-50%) translateY(-1px);
-    @include apple-shadow-lg;
-  }
-}
-
-.selector-divider {
-  height: 18px !important;
-  min-height: 18px !important;
-  max-height: 18px !important;
-  align-self: center;
-  opacity: 0.12;
-  margin: 0 2px;
-}
-
-.case-selector,
-.slide-selector {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: $apple-radius-lg;
-  cursor: pointer;
-  transition: all $apple-duration-fast $apple-timing;
-
-  // Subtle hover background
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 2px;
-    border-radius: calc($apple-radius-lg - 2px);
-    background: rgba(var(--v-theme-on-surface), 0);
-    transition: background $apple-duration-fast $apple-timing;
-  }
-
-  &:hover::before {
-    background: rgba(var(--v-theme-on-surface), 0.05);
-  }
-
-  &:active::before {
-    background: rgba(var(--v-theme-on-surface), 0.08);
-  }
-
-  .case-icon,
-  .slide-icon {
-    opacity: 0.55;
-    transition: opacity $apple-duration-fast $apple-timing;
-  }
-
-  &:hover .case-icon,
-  &:hover .slide-icon {
-    opacity: 0.75;
-  }
-
-  .case-name {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 590;
-    letter-spacing: -0.01em;
-    color: rgb(var(--v-theme-on-surface));
-    white-space: nowrap;
-  }
-
-  .slide-name {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    font-size: 13px;
-    font-weight: 400;
-    letter-spacing: -0.005em;
-    color: rgba(var(--v-theme-on-surface), 0.72);
-    white-space: nowrap;
-  }
-
-  .chevron-icon {
-    opacity: 0.35;
-    transition: all $apple-duration-fast $apple-spring;
-    margin-left: -2px;
-  }
-
-  &:hover .chevron-icon {
-    opacity: 0.55;
-    transform: translateY(1px);
-  }
-}
 
 /* ========================================
    APPLE-STYLE DROPDOWN MENUS
@@ -3913,32 +3224,6 @@ $apple-duration-slow: 0.4s;
   }
 }
 
-/* Slides Dropdown - Apple Style */
-.slides-dropdown {
-  @include apple-vibrancy-heavy(0.92);
-  @include apple-border(0.12);
-  border-radius: $apple-radius-md;
-  @include apple-shadow-elevated;
-  min-width: 240px;
-  overflow: hidden;
-  animation: appleMenuIn 0.18s $apple-spring both;
-
-  .dropdown-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px 8px;
-  }
-
-  .dropdown-title {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: rgba(var(--v-theme-on-surface), 0.5);
-  }
-}
 
 .slide-item {
   display: flex;
@@ -4594,6 +3879,29 @@ $apple-duration-slow: 0.4s;
   opacity: 0.4;
 }
 
+// Panel tabs row with close button
+.panel-tabs-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.panel-tabs-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-close-btn {
+  flex-shrink: 0;
+  margin-right: 8px;
+  opacity: 0.5;
+  transition: opacity $apple-duration-fast $apple-timing;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
 // Panel Header & Tabs - Apple Segmented Control Style
 .panel-header {
   background: transparent;
@@ -4796,8 +4104,188 @@ $apple-duration-slow: 0.4s;
 }
 
 /* ========================================
-   DETAILS TAB STYLES
+   INFO TAB STYLES
    ======================================== */
+
+.info-panel {
+  // No own scroll — the v-navigation-drawer handles it
+}
+
+.info-section {
+  padding: 16px;
+}
+
+.info-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.info-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.info-case-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.4;
+}
+
+.info-slides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.info-slide-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: rgba(var(--v-theme-on-surface), 0.04);
+  }
+
+  &--active {
+    background: rgba(var(--v-theme-primary), 0.08);
+  }
+}
+
+.info-slide-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.info-slide-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.info-slide-id {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// User card
+.info-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.info-user-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.info-user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-user-role {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+// Patient data
+.info-patient-data {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.info-patient-row {
+  display: contents;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.info-patient-label {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.info-patient-value {
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 500;
+}
+
+// Access log
+.info-access-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.info-log-text {
+  flex: 1;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-log-time {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  flex-shrink: 0;
+}
+
+// Slide select & single
+.info-slide-select {
+  :deep(.v-field) {
+    border-radius: 8px;
+    font-size: 13px;
+  }
+}
+
+.info-slide-single {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
 
 .details-card {
   background: rgba(var(--v-theme-surface-variant), 0.2);
@@ -5815,100 +5303,6 @@ $apple-duration-slow: 0.4s;
   }
 }
 
-/* ===========================================
-   REPORT PANEL (LAUDO)
-   =========================================== */
-
-.report-panel {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 56px);
-  overflow: hidden;
-}
-
-.report-header {
-  flex-shrink: 0;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.report-form-scroll {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.report-form {
-  :deep(.v-textarea .v-field) {
-    background: rgba(var(--v-theme-surface-variant), 0.2);
-    border-radius: 8px;
-  }
-
-  :deep(.v-textarea .v-field--focused) {
-    background: rgba(var(--v-theme-surface), 1);
-  }
-}
-
-.ai-suggestion-card {
-  padding: 12px;
-  background: linear-gradient(135deg,
-    rgba(var(--v-theme-accent), 0.08),
-    rgba(var(--v-theme-accent), 0.04)
-  );
-  border: 1px solid rgba(var(--v-theme-accent), 0.15);
-  border-radius: 10px;
-
-  .ai-suggestion-text {
-    font-style: italic;
-    line-height: 1.5;
-  }
-}
-
-.report-export-actions {
-  flex-shrink: 0;
-  margin-top: auto;
-  background: rgba(var(--v-theme-surface-variant), 0.2);
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.concluded-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: rgba(var(--v-theme-success), 0.1);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: rgb(var(--v-theme-success));
-}
-
-/* Mobile Report */
-.mobile-report {
-  .mobile-ai-suggestion {
-    padding: 10px;
-    background: rgba(var(--v-theme-accent), 0.06);
-    border-radius: 8px;
-  }
-
-  .mobile-report-actions {
-    margin-top: 8px;
-  }
-
-  .mobile-concluded-badge {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: rgba(var(--v-theme-success), 0.1);
-    border-radius: 6px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: rgb(var(--v-theme-success));
-  }
-}
 
 /* Mobile Case Dropdown */
 .mobile-case-dropdown {
@@ -6505,35 +5899,4 @@ $apple-duration-slow: 0.4s;
   padding: 0 20px !important;
 }
 
-/* Mobile Floating Case Container */
-@media (max-width: 600px) {
-  .floating-case-container {
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .case-slide-selector {
-    padding: 6px 10px;
-    gap: 6px;
-  }
-
-  .case-name {
-    font-size: 11px;
-    max-width: 80px;
-  }
-
-  .slide-name {
-    font-size: 11px;
-    max-width: 60px;
-  }
-
-  .slide-divider {
-    font-size: 10px;
-  }
-
-  .chevron-icon {
-    display: none;
-  }
-}
 </style>

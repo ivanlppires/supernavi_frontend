@@ -16,7 +16,7 @@ const router = createRouter({
 })
 
 // Protected routes that require authentication
-const protectedRoutes = ['/dashboard', '/viewer']
+const protectedRoutes = ['/dashboard', '/viewer', '/pair']
 
 // Navigation guard for authentication
 router.beforeEach(async (to, from, next) => {

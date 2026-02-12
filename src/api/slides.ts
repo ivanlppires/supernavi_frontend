@@ -45,6 +45,13 @@ export const slidesApi = {
   },
 
   /**
+   * Get sibling slides by external case base (e.g. "AP26000299")
+   */
+  async getByCaseBase (caseBase: string): Promise<Slide[]> {
+    return apiClient.get<Slide[]>(`/slides/by-case-base/${encodeURIComponent(caseBase)}`)
+  },
+
+  /**
    * List annotations for a slide
    */
   async getAnnotations (slideId: string): Promise<Annotation[]> {

@@ -22,6 +22,7 @@ declare module 'vue-router/auto-routes' {
     '/dashboard/': RouteRecordInfo<'/dashboard/', '/dashboard', Record<never, never>, Record<never, never>>,
     '/dashboard/reports': RouteRecordInfo<'/dashboard/reports', '/dashboard/reports', Record<never, never>, Record<never, never>>,
     '/dashboard/settings': RouteRecordInfo<'/dashboard/settings', '/dashboard/settings', Record<never, never>, Record<never, never>>,
+    '/pair': RouteRecordInfo<'/pair', '/pair', Record<never, never>, Record<never, never>>,
     '/viewer': RouteRecordInfo<'/viewer', '/viewer', Record<never, never>, Record<never, never>>,
   }
 
@@ -50,6 +51,10 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/dashboard/settings.vue': {
       routes: '/dashboard/settings'
+      views: never
+    }
+    'src/pages/pair.vue': {
+      routes: '/pair'
       views: never
     }
     'src/pages/viewer.vue': {

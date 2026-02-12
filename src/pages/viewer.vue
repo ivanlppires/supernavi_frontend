@@ -144,6 +144,19 @@
       </div>
     </Transition>
 
+    <!-- Loading Skeleton - Covers from mount until DziViewer opens -->
+    <Transition name="skeleton-fade">
+      <div v-if="showSkeleton" class="viewer-skeleton">
+        <div class="skeleton-slide-area">
+          <div class="skeleton-shimmer" />
+        </div>
+        <div class="skeleton-caption">
+          <div class="skeleton-spinner" />
+          <span>Preparando visualização...</span>
+        </div>
+      </div>
+    </Transition>
+
     <!-- DZI Viewer - Only render when we have a tile source -->
     <DziViewer
       v-if="tileSource"
@@ -186,6 +199,7 @@
   import { slidesApi } from '@/api/slides'
   import DziViewer from '@/components/DziViewer.vue'
   import { useCases } from '@/composables/useCases'
+  import { useAuthStore } from '@/stores/auth'
   import { useEdgeFirstTileSource } from '@/composables/useEdgeFirstTileSource'
   import { useSignedTileSource } from '@/composables/useSignedTileSource'
   import { useSlides } from '@/composables/useSlides'
@@ -224,6 +238,10 @@
   const currentCase = ref<any>(null)
   const slides = ref<Slide[]>([])
   const currentSlideIndex = ref(0)
+
+  // Loading skeleton state
+  const hasLoadedData = ref(false)
+  const isViewerReady = ref(false)
 
   // Progress tracking
   const processingProgress = ref(0)
@@ -395,10 +413,16 @@
 
   // Show empty state only for specific states (not for normal loading - DziViewer handles that)
   const showEmptyState = computed(() => {
-    // Don't show empty state if we have a tile source (viewer is ready)
     if (tileSource.value) return false
-    // Show for: no slide, processing, or failed states
+    if (!hasLoadedData.value) return false // skeleton handles the initial loading
     return !currentSlide.value || isSlideProcessing.value || currentSlide.value?.processingStatus === 'failed'
+  })
+
+  // Skeleton covers from mount until DziViewer opens (replaces blank screen + flash)
+  const showSkeleton = computed(() => {
+    if (showEmptyState.value) return false
+    if (isViewerReady.value) return false
+    return true
   })
 
   // Thumbnail URL for smooth loading placeholder
@@ -430,11 +454,10 @@
       viewerControls.registerViewer(dziViewerRef.value)
 
       // Set slide info from loaded case/slide data
-      const caseName = currentCase.value
-        ? `${currentCase.value.caseNumber} - ${currentCase.value.patientName}`
-        : 'Visualizador'
+      const caseName = deriveCaseName(currentSlide.value, currentCase.value)
       const slideName = currentSlide.value?.name || 'Lâmina'
       viewerControls.setSlideInfo(caseName, slideName)
+      updateSlideMetadata(currentSlide.value)
 
       // Track mouse movement for coordinates
       viewer.addHandler('canvas-nonprimary-press', (event: any) => {
@@ -467,6 +490,7 @@
 
   function handleSlideOpened (event: OpenSeadragon.ViewerEvent) {
     console.log('[ViewerPage] Slide loaded successfully')
+    isViewerReady.value = true
     viewerControls.state.value.isLoading = false
     viewerControls.state.value.isReady = true
 
@@ -703,16 +727,85 @@
     }
   }
 
+  // Push slide metadata to shared viewer state (layout reads it)
+  function updateSlideMetadata (slide: Slide | null) {
+    viewerControls.state.value.slideMetadata = slide
+      ? {
+          originalFilename: slide.originalFilename,
+          fileFormat: slide.fileFormat,
+          fileSize: slide.fileSize,
+          uploadedAt: slide.uploadedAt,
+          processedAt: slide.processedAt,
+          externalCaseBase: slide.externalCaseBase ?? null,
+        }
+      : null
+  }
+
+  // Derive the best case name from available data
+  function deriveCaseName (slide?: Slide | null, caseData?: any): string {
+    // 1. From case data (normal flow) — patient name shown separately in info panel
+    if (caseData?.caseNumber) return caseData.caseNumber
+
+    // 2. From PathoWeb external_case_base (e.g. "AP26000230")
+    if (slide?.externalCaseBase) return slide.externalCaseBase
+
+    // 3. From filename (strip extension)
+    if (slide?.name) return slide.name
+
+    return 'Visualizador'
+  }
+
+  // Decode JWT payload without verification (server already signed it)
+  function decodeJwtPayload (token: string): Record<string, any> | null {
+    try {
+      const parts = token.split('.')
+      if (parts.length !== 3) return null
+      return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    } catch {
+      return null
+    }
+  }
+
   // Magic link support: load slide directly with token, no case needed
   async function loadFromMagicLink (slideId: string, token: string) {
-    console.log('[ViewerPage] Loading via magic link, slideId:', slideId)
+    const authStore = useAuthStore()
+    const userIsAuthenticated = authStore.isAuthenticated && apiClient.getToken()
 
-    // Magic links are always read-only
-    isReadOnly.value = true
+    console.log('[ViewerPage] Loading via magic link, slideId:', slideId, 'userAuth:', !!userIsAuthenticated)
 
-    // Store token for this session's API calls
+    // Decode JWT payload once
+    const payload = decodeJwtPayload(token)
+
+    // Populate user identity from magic link JWT if auth store is empty
+    if (!authStore.isAuthenticated) {
+      if (payload?.userId) {
+        authStore.user = {
+          id: payload.userId,
+          name: payload.userName || 'Usuário',
+          email: '',
+          role: 'pathologist',
+          avatar: payload.userAvatar || undefined,
+          createdAt: new Date(),
+        }
+        authStore.isAuthenticated = true
+      }
+    }
+
+    // Extract patient data from JWT (scraped by extension from PathoWeb)
+    if (payload?.patientData) {
+      viewerControls.state.value.patientData = payload.patientData
+    }
+
+    // Only read-only if user is NOT identified at all
+    if (!authStore.isAuthenticated) {
+      isReadOnly.value = true
+    }
+
+    // Only use magic token if user has no real session
     const previousToken = apiClient.getToken()
-    apiClient.setToken(token)
+    if (!userIsAuthenticated) {
+      apiClient.setToken(token)
+    }
 
     try {
       const slide = await slidesApi.get(slideId)
@@ -721,20 +814,65 @@
 
       viewerControls.setSlides([convertToViewerSlide(slide)])
       viewerControls.setActiveSlideId(slide.id)
-      viewerControls.setSlideInfo('Magic Link', slide.name)
+      viewerControls.setSlideInfo(deriveCaseName(slide), slide.name)
+      updateSlideMetadata(slide)
 
       if (slide.processingStatus === 'ready') {
         await loadSlideWithEdgeFirst(slide)
       } else if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending') {
         startProgressPolling()
       }
+
+      // Load case record (if auto-created) to get persisted patient data
+      if (slide.caseId) {
+        try {
+          const caseRecord = await casesStore.getCase(slide.caseId)
+          if (caseRecord) {
+            currentCase.value = caseRecord
+            // Use persisted case data as primary source (overrides JWT patientData)
+            const pd: Record<string, string> = {}
+            if (caseRecord.patientName) pd.patientName = caseRecord.patientName
+            if (caseRecord.caseNumber) pd.patientId = caseRecord.caseNumber
+            if (caseRecord.patientAge != null) pd.age = String(caseRecord.patientAge)
+            if (caseRecord.doctor) pd.doctor = caseRecord.doctor
+            if (Object.keys(pd).length > 0) {
+              viewerControls.state.value.patientData = pd
+            }
+            // Update case name in header
+            viewerControls.setSlideInfo(deriveCaseName(slide, caseRecord), slide.name)
+          }
+        } catch (err) {
+          console.warn('[ViewerPage] Could not load case record:', err)
+        }
+      }
+
+      // Load all sibling slides for the same case (enables slide switching)
+      try {
+        let allSlides: typeof slides.value = []
+        if (slide.caseId) {
+          allSlides = await casesStore.getCaseSlides(slide.caseId)
+        } else if (slide.externalCaseBase) {
+          allSlides = await slidesApi.getByCaseBase(slide.externalCaseBase)
+        }
+        if (allSlides.length > 1) {
+          slides.value = allSlides
+          currentSlideIndex.value = allSlides.findIndex(s => s.id === slide.id)
+          viewerControls.setSlides(allSlides.map(convertToViewerSlide))
+          viewerControls.setActiveSlideId(slide.id)
+          console.log('[ViewerPage] Loaded', allSlides.length, 'sibling slides')
+        }
+      } catch (err) {
+        console.warn('[ViewerPage] Could not load case slides:', err)
+      }
     } catch (error) {
       console.error('[ViewerPage] Magic link load failed:', error)
       // Restore previous token if magic link fails
-      if (previousToken) {
-        apiClient.setToken(previousToken)
-      } else {
-        apiClient.clearToken()
+      if (!userIsAuthenticated) {
+        if (previousToken) {
+          apiClient.setToken(previousToken)
+        } else {
+          apiClient.clearToken()
+        }
       }
     }
   }
@@ -758,6 +896,16 @@
       currentCase.value = await casesStore.getCase(caseId)
 
       if (currentCase.value) {
+        // Populate patient data from case record (works for dashboard navigation)
+        const c = currentCase.value
+        const pd: Record<string, string> = {}
+        if (c.patientName) pd.patientName = c.patientName
+        if (c.caseNumber) pd.patientId = c.caseNumber
+        if (c.patientAge != null) pd.age = String(c.patientAge)
+        if (c.doctor) pd.doctor = c.doctor
+        if (Object.keys(pd).length > 0) {
+          viewerControls.state.value.patientData = pd
+        }
         // Load slides for this case
         slides.value = await casesStore.getCaseSlides(caseId)
 
@@ -817,11 +965,18 @@
     viewerControls.state.value.isLoading = true
     console.log('[ViewerPage] Mounted')
 
+    // Restore user session from storage (needed for magic links that skip router auth)
+    const authStore = useAuthStore()
+    if (!authStore.isAuthenticated) {
+      await authStore.initFromStorage()
+    }
+
     // Register callback for when layout changes the active slide
     viewerControls.onSlideChange(handleSlideChangeFromLayout)
 
     // Load case data from API
     await loadCaseData()
+    hasLoadedData.value = true
   })
 
   onBeforeUnmount(() => {
@@ -835,7 +990,7 @@
   // Watch for case changes to update slide info in the header
   watch(currentCase, newCase => {
     if (newCase) {
-      const caseName = `${newCase.caseNumber} - ${newCase.patientName}`
+      const caseName = deriveCaseName(currentSlide.value, newCase)
       const slideName = currentSlide.value?.name || 'Lâmina'
       viewerControls.setSlideInfo(caseName, slideName)
       console.log('[ViewerPage] Updated case name:', caseName)
@@ -846,6 +1001,9 @@
   watch(currentSlide, async (newSlide, oldSlide) => {
     if (newSlide && newSlide.id !== oldSlide?.id) {
       console.log('[ViewerPage] Slide changed, loading tile source (edge-first)...')
+
+      // Reset viewer ready state for skeleton
+      isViewerReady.value = false
 
       // Clear previous tile sources
       edgeFirstTileSource.clear()
@@ -858,10 +1016,9 @@
       await loadSlideWithEdgeFirst(newSlide)
 
       // Also update slide name in header
-      if (currentCase.value) {
-        const caseName = `${currentCase.value.caseNumber} - ${currentCase.value.patientName}`
-        viewerControls.setSlideInfo(caseName, newSlide.name)
-      }
+      const caseName = deriveCaseName(newSlide, currentCase.value)
+      viewerControls.setSlideInfo(caseName, newSlide.name)
+      updateSlideMetadata(newSlide)
     }
   })
 
@@ -1139,6 +1296,75 @@
     linear-gradient(90deg, rgb(var(--v-theme-primary)) 1px, transparent 1px);
   background-size: 40px 40px;
   transform: rotate(-5deg);
+}
+
+// Loading Skeleton
+.viewer-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--v-theme-surface));
+  gap: 24px;
+}
+
+.skeleton-slide-area {
+  width: min(60%, 480px);
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  overflow: hidden;
+  position: relative;
+}
+
+.skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(var(--v-theme-on-surface), 0.04) 50%,
+    transparent 70%
+  );
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.skeleton-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  font-weight: 500;
+}
+
+.skeleton-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(var(--v-theme-primary), 0.15);
+  border-top-color: rgb(var(--v-theme-primary));
+  border-radius: 50%;
+  animation: skeleton-spin 0.8s linear infinite;
+}
+
+@keyframes skeleton-spin {
+  to { transform: rotate(360deg); }
+}
+
+.skeleton-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+
+.skeleton-fade-leave-to {
+  opacity: 0;
 }
 
 // Fade transition

@@ -73,6 +73,22 @@ export interface ViewerState {
   imageHeight: number        // Full image height in pixels
   magnification: number      // Current optical magnification
   isDigitalZoom: boolean     // True if zoomed beyond native resolution
+  // Full slide metadata (set by viewer page)
+  slideMetadata: {
+    originalFilename: string
+    fileFormat: string
+    fileSize: string
+    uploadedAt: string
+    processedAt: string | null
+    externalCaseBase: string | null
+  } | null
+  // Patient data from PathoWeb (scraped by extension, passed via magic link JWT)
+  patientData: {
+    patientName?: string
+    patientId?: string
+    age?: string
+    doctor?: string
+  } | null
 }
 
 export interface ViewerControls {
@@ -165,6 +181,8 @@ const state = ref<ViewerState>({
   imageHeight: 0,
   magnification: 1,
   isDigitalZoom: false,
+  slideMetadata: null,
+  patientData: null,
 })
 
 // ROI click callback

@@ -74,6 +74,7 @@ export interface Case {
   patientName: string
   patientAge: number | null
   patientSex: 'M' | 'F' | null
+  doctor: string | null
   status: CaseStatus
   location: CaseLocation
   ownerId: string
@@ -151,6 +152,7 @@ export interface Slide {
   processingError: string | null
   uploadedAt: string
   processedAt: string | null
+  externalCaseBase?: string | null
 }
 
 export interface CreateSlideRequest {

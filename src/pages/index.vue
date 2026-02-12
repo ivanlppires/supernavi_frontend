@@ -587,11 +587,12 @@
 
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { useGoogleSignIn } from '@/composables/useGoogleSignIn'
   import { useAuthStore } from '@/stores/auth'
 
   const router = useRouter()
+  const route = useRoute()
   const authStore = useAuthStore()
   const googleSignIn = useGoogleSignIn()
   const currentYear = computed(() => new Date().getFullYear())
@@ -646,6 +647,11 @@
     passwordMatch: (v: string) => v === signupForm.value.password || 'As senhas não coincidem',
   }
 
+  function navigateAfterAuth () {
+    const redirect = route.query.redirect as string | undefined
+    router.push(redirect || '/dashboard')
+  }
+
   function openLoginDialog () {
     showLoginDialog.value = true
     authView.value = 'login'
@@ -674,7 +680,7 @@
 
     if (success) {
       closeLoginDialog()
-      router.push('/dashboard')
+      navigateAfterAuth()
     } else {
       loginError.value = authStore.error || 'E-mail ou senha incorretos'
     }
@@ -712,7 +718,7 @@
 
     if (success) {
       closeLoginDialog()
-      router.push('/dashboard')
+      navigateAfterAuth()
     } else {
       signupError.value = authStore.error || 'Erro ao criar conta. Tente novamente.'
     }
@@ -729,7 +735,7 @@
 
       if (success) {
         closeLoginDialog()
-        router.push('/dashboard')
+        navigateAfterAuth()
       } else {
         const errorMsg = authStore.error || 'Falha ao fazer login com Google'
         if (authView.value === 'signup') {
