@@ -2517,7 +2517,7 @@
   }
 
   // API URLs
-  const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.supernavi.app'
+  const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || 'https://cloud.supernavi.app'
   const API_BASE_URL = `${CLOUD_BASE_URL}/api`
 
   // Generate thumbnail URL for a case (uses Cloud API's preview endpoint)

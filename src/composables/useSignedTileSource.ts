@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
 // Must match api/client.ts configuration
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://api.supernavi.app') + '/api'
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://cloud.supernavi.app') + '/api'
 const TOKEN_KEY = 'supernavi_token'
 
 export interface DziMetadata {

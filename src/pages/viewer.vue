@@ -204,6 +204,7 @@
   import { useSignedTileSource } from '@/composables/useSignedTileSource'
   import { useSlides } from '@/composables/useSlides'
   import { useViewer } from '@/composables/useViewer'
+  import { deriveCaseName } from '@/utils/viewer-utils'
 
   // Define o layout específico para esta página
   definePage({
@@ -427,7 +428,7 @@
 
   // Thumbnail URL for smooth loading placeholder
   // Priority: edge-first > cloud API
-  const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://api.supernavi.app') + '/api'
+  const API_BASE_URL = (import.meta.env.VITE_API_URL || 'https://cloud.supernavi.app') + '/api'
   const currentThumbnailUrl = computed(() => {
     // Use edge-first thumbnail if available
     if (edgeFirstTileSource.thumbnailUrl.value) {
@@ -741,19 +742,7 @@
       : null
   }
 
-  // Derive the best case name from available data
-  function deriveCaseName (slide?: Slide | null, caseData?: any): string {
-    // 1. From case data (normal flow) — patient name shown separately in info panel
-    if (caseData?.caseNumber) return caseData.caseNumber
-
-    // 2. From PathoWeb external_case_base (e.g. "AP26000230")
-    if (slide?.externalCaseBase) return slide.externalCaseBase
-
-    // 3. From filename (strip extension)
-    if (slide?.name) return slide.name
-
-    return 'Visualizador'
-  }
+  // deriveCaseName imported from @/utils/viewer-utils
 
   // Decode JWT payload without verification (server already signed it)
   function decodeJwtPayload (token: string): Record<string, any> | null {

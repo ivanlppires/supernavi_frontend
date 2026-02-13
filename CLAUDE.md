@@ -68,7 +68,7 @@ All backend communication goes through `src/api/`:
 - **`s3.ts`**: Signed URL handling for DZI tiles with caching
 - Types defined in `types.ts`
 
-Backend URL: `VITE_API_URL` env var (default: `https://api.supernavi.app`)
+Backend URL: `VITE_API_URL` env var (default: `https://cloud.supernavi.app`)
 
 ### State Management
 
