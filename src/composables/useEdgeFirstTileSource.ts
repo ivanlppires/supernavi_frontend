@@ -29,7 +29,8 @@ export interface TileManifest {
   mpp?: number | null        // Microns per pixel
   // Cloud-specific fields
   originalLevelMax?: number
-  maxPreviewLevel?: number
+  maxPreviewLevel?: number   // Rebased max level (how many levels of tiles exist in S3)
+  levelOffset?: number       // Offset between DZI absolute levels and rebased levels
   storage?: {
     prefix?: string
   }
@@ -160,19 +161,34 @@ function createLocalTileSource (agentId: string, slideId: string, manifest: Tile
 
 /**
  * Create OpenSeadragon tile source for cloud preview
+ *
+ * The cloud stores tiles using a rebased level system (0..maxPreviewLevel),
+ * but OpenSeadragon uses DZI absolute levels (level L = 2^L pixels).
+ * The cloud tile route handles the level mapping, so we just need to set
+ * the correct DZI-absolute maxLevel and minLevel for OSD.
  */
 function createCloudTileSource (slideId: string, manifest: TileManifest): object {
-  const maxLevel = manifest.levelMax ?? manifest.maxLevel ?? Math.ceil(Math.log2(Math.max(manifest.width, manifest.height)))
   const format = manifest.format || 'jpg'
+
+  // Calculate DZI absolute maxLevel from dimensions
+  const absoluteMaxLevel = Math.ceil(Math.log2(Math.max(manifest.width, manifest.height)))
+
+  // The rebased maxLevel from the manifest (how many levels of tiles exist)
+  const rebasedMaxLevel = manifest.maxPreviewLevel ?? manifest.levelMax ?? manifest.maxLevel ?? absoluteMaxLevel
+
+  // Level offset: the cloud tile route uses this to map DZI levels to rebased S3 levels
+  // minLevel prevents OSD from requesting levels below what exists
+  const levelOffset = absoluteMaxLevel - rebasedMaxLevel
 
   return {
     width: manifest.width,
     height: manifest.height,
     tileSize: manifest.tileSize || 256,
     tileOverlap: 0,
-    minLevel: 0,
-    maxLevel,
+    minLevel: levelOffset,
+    maxLevel: absoluteMaxLevel,
     // Custom tile URL function for cloud preview
+    // Passes DZI absolute level - the cloud tile route handles mapping to rebased level
     getTileUrl (level: number, x: number, y: number): string {
       return `/preview/${slideId}/tiles/${level}/${x}_${y}.${format}`
     },
