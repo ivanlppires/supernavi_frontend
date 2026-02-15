@@ -179,9 +179,6 @@ export function useEdgeStatus () {
       const id = edgeAgentInfo.value?.agentId || EDGE_AGENT_ID
       return `Agente Local (${id})`
     }
-    if (!isConfigured.value) {
-      return 'Agente não configurado'
-    }
     return 'Cloud (sem agente local)'
   })
 
