@@ -323,35 +323,39 @@
                     </v-chip>
                   </div>
                 </div>
-                <v-menu>
+                <v-menu location="bottom end" offset="6" transition="scale-transition">
                   <template #activator="{ props }">
                     <v-btn icon size="small" variant="text" v-bind="props">
-                      <v-icon>mdi-dots-vertical</v-icon>
+                      <v-icon>mdi-dots-horizontal</v-icon>
                     </v-btn>
                   </template>
-                  <v-list density="compact">
+                  <v-list class="apple-context-menu" density="compact">
                     <v-list-item
-                      prepend-icon="mdi-eye"
-                      title="Ir para região"
+                      prepend-icon="mdi-crosshairs-gps"
                       @click="focusAnnotation(selectedAnnotation.id)"
-                    />
+                    >
+                      <v-list-item-title>Ir para região</v-list-item-title>
+                    </v-list-item>
                     <v-list-item
-                      prepend-icon="mdi-account-plus"
-                      title="Convidar patologista"
+                      prepend-icon="mdi-account-plus-outline"
                       @click="openInviteDialog"
-                    />
+                    >
+                      <v-list-item-title>Convidar patologista</v-list-item-title>
+                    </v-list-item>
                     <v-list-item
-                      :prepend-icon="selectedAnnotation.status === 'resolved' ? 'mdi-restore' : 'mdi-check-circle'"
-                      :title="selectedAnnotation.status === 'resolved' ? 'Reabrir discussão' : 'Marcar como resolvido'"
+                      :prepend-icon="selectedAnnotation.status === 'resolved' ? 'mdi-arrow-u-left-top' : 'mdi-check-circle-outline'"
                       @click="toggleAnnotationResolved"
-                    />
-                    <v-divider />
+                    >
+                      <v-list-item-title>{{ selectedAnnotation.status === 'resolved' ? 'Reabrir discussão' : 'Marcar como resolvido' }}</v-list-item-title>
+                    </v-list-item>
+                    <div class="apple-menu-divider" />
                     <v-list-item
-                      class="text-error"
-                      prepend-icon="mdi-delete"
-                      title="Excluir ROI"
+                      class="apple-menu-destructive"
+                      prepend-icon="mdi-trash-can-outline"
                       @click="deleteSelectedROI"
-                    />
+                    >
+                      <v-list-item-title>Excluir ROI</v-list-item-title>
+                    </v-list-item>
                   </v-list>
                 </v-menu>
               </div>
@@ -469,7 +473,7 @@
 
                     <!-- Actions Menu (only for own messages) -->
                     <div v-if="message.authorId === currentUser.id && editingMessageId !== message.id" class="message-actions">
-                      <v-menu location="bottom end" offset="4">
+                      <v-menu location="bottom end" offset="6" transition="scale-transition">
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
@@ -478,21 +482,24 @@
                             size="x-small"
                             variant="text"
                           >
-                            <v-icon size="16">mdi-dots-vertical</v-icon>
+                            <v-icon size="16">mdi-dots-horizontal</v-icon>
                           </v-btn>
                         </template>
-                        <v-list class="message-actions-menu" density="compact">
+                        <v-list class="apple-context-menu" density="compact">
                           <v-list-item
                             prepend-icon="mdi-pencil-outline"
-                            title="Editar"
                             @click="startMessageEdit(message)"
-                          />
+                          >
+                            <v-list-item-title>Editar</v-list-item-title>
+                          </v-list-item>
+                          <div class="apple-menu-divider" />
                           <v-list-item
-                            class="text-error"
+                            class="apple-menu-destructive"
                             prepend-icon="mdi-trash-can-outline"
-                            title="Remover"
                             @click="confirmDeleteMessage(message)"
-                          />
+                          >
+                            <v-list-item-title>Remover</v-list-item-title>
+                          </v-list-item>
                         </v-list>
                       </v-menu>
                     </div>
@@ -4734,6 +4741,75 @@ $apple-duration-slow: 0.4s;
   .v-list-item {
     min-height: 40px;
     font-size: 13px;
+  }
+}
+
+/* ========================================
+   Apple-like Context Menu
+   ======================================== */
+:deep(.apple-context-menu) {
+  min-width: 200px !important;
+  padding: 4px !important;
+  border-radius: 12px !important;
+  background: rgba(var(--v-theme-surface), 0.82) !important;
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow:
+    0 0 0 0.5px rgba(var(--v-theme-on-surface), 0.08),
+    0 8px 40px rgba(0, 0, 0, 0.22),
+    0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  overflow: hidden;
+
+  .v-list-item {
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    margin: 1px 0;
+    border-radius: 7px !important;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    color: rgb(var(--v-theme-on-surface));
+    transition: background 0.12s ease;
+
+    &:hover {
+      background: rgba(var(--v-theme-primary), 0.12) !important;
+    }
+
+    .v-list-item__prepend {
+      .v-icon {
+        font-size: 18px !important;
+        opacity: 0.72;
+        margin-inline-end: 10px;
+      }
+    }
+
+    .v-list-item-title {
+      font-size: 13px !important;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+  }
+
+  .apple-menu-divider {
+    height: 1px;
+    margin: 4px 10px;
+    background: rgba(var(--v-theme-on-surface), 0.1);
+  }
+
+  .apple-menu-destructive {
+    color: rgb(var(--v-theme-error)) !important;
+
+    .v-list-item-title {
+      color: rgb(var(--v-theme-error)) !important;
+    }
+
+    .v-list-item__prepend .v-icon {
+      color: rgb(var(--v-theme-error)) !important;
+      opacity: 0.9;
+    }
+
+    &:hover {
+      background: rgba(var(--v-theme-error), 0.1) !important;
+    }
   }
 }
 
