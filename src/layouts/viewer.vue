@@ -192,12 +192,13 @@
                       </div>
                       <div class="d-flex align-center ga-1">
                         <v-chip
+                          v-if="annotation.priority === 'urgent' || annotation.priority === 'high'"
                           class="priority-chip"
                           :color="getPriorityColor(annotation.priority)"
                           size="x-small"
                           variant="flat"
                         >
-                          {{ annotation.priority === 'urgent' ? '!' : annotation.priority === 'high' ? '!!' : '' }}
+                          {{ annotation.priority === 'urgent' ? '!' : '!!' }}
                         </v-chip>
                         <v-badge
                           v-if="annotation.unreadCount > 0"
