@@ -219,7 +219,7 @@
     constrainDuringPan: true,
     visibilityRatio: 1,
     minZoomLevel: 0.5,
-    maxZoomLevel: undefined,
+    maxZoomLevel: 50,
     maxZoomPixelRatio: 4,
     defaultZoomLevel: 1,
     degrees: 0,
