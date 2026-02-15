@@ -116,9 +116,15 @@
     minZoomLevel?: number
 
     /**
-     * Maximum zoom level
+     * Maximum zoom level (absolute OSD zoom value, undefined = use maxZoomPixelRatio)
      */
     maxZoomLevel?: number
+
+    /**
+     * Maximum ratio between 1 image pixel and 1 screen pixel.
+     * Limits zoom based on actual image resolution.
+     */
+    maxZoomPixelRatio?: number
 
     /**
      * Default zoom level
@@ -213,7 +219,8 @@
     constrainDuringPan: true,
     visibilityRatio: 1,
     minZoomLevel: 0.5,
-    maxZoomLevel: 50,
+    maxZoomLevel: undefined,
+    maxZoomPixelRatio: 4,
     defaultZoomLevel: 1,
     degrees: 0,
     imageSmoothingEnabled: true,
@@ -384,6 +391,7 @@
       visibilityRatio: props.visibilityRatio,
       minZoomLevel: props.minZoomLevel,
       maxZoomLevel: props.maxZoomLevel,
+      maxZoomPixelRatio: props.maxZoomPixelRatio,
       defaultZoomLevel: props.defaultZoomLevel,
       degrees: props.degrees,
       imageSmoothingEnabled: props.imageSmoothingEnabled,

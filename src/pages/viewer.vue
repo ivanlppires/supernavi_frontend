@@ -495,7 +495,7 @@
     viewerControls.state.value.isLoading = false
     viewerControls.state.value.isReady = true
 
-    // Set magnification metadata from manifest
+    // Set magnification metadata from manifest or slide data
     const manifest = edgeFirstTileSource.manifest.value
     if (manifest) {
       viewerControls.setMagnificationMetadata(
@@ -504,6 +504,19 @@
         manifest.width,
         manifest.height,
       )
+    } else {
+      // Fallback: compute magnification from slide API data + DZI preview dimensions
+      const slide = currentSlide.value
+      const meta = signedTileSource.metadata.value
+      if (slide && meta && slide.width && slide.height) {
+        const originalMpp = slide.mpp ? parseFloat(slide.mpp) : null
+        // Scale mpp from original to preview resolution
+        const scaleFactor = Math.max(slide.width, slide.height) / Math.max(meta.width, meta.height)
+        const previewMpp = originalMpp ? originalMpp * scaleFactor : null
+        // appMag: 10/mpp is a rough approximation of objective magnification
+        const previewAppMag = previewMpp ? Math.round(10 / previewMpp * 10) / 10 : null
+        viewerControls.setMagnificationMetadata(previewAppMag, previewMpp, meta.width, meta.height)
+      }
     }
 
     // Estimate total tiles based on pyramid structure
