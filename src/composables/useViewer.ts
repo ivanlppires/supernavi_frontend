@@ -405,25 +405,28 @@ export function useViewer (): ViewerControls {
     paddedRect.width += paddingX * 2
     paddedRect.height += paddingY * 2
 
-    // Cap zoom so scale bar stays >= MIN_SCALE_UM (37 µm)
-    // When the viewport shows a very small region, the zoom can get extreme.
-    // We limit it so the viewport width represents at least MIN_SCALE_UM microns.
+    // Cap zoom so scale bar reads >= MIN_SCALE_UM (37 µm per 100px bar)
+    // Scale bar formula (from updateZoom):
+    //   barMicrons = 100 * (imageWidth / (containerWidth * zoom)) * mpp
+    // For barMicrons >= 37:
+    //   imagePixelsPerScreenPixel >= MIN_SCALE_UM / (100 * mpp)
+    //   viewportWidthInImagePixels >= containerWidth * MIN_SCALE_UM / (100 * mpp)
     const MIN_SCALE_UM = 37
+    const SCALE_BAR_PX = 100
     const mpp = state.value.mpp
     const imageWidth = state.value.imageWidth
     if (mpp && imageWidth) {
       const containerWidth = viewerInstance.value.container.clientWidth
-      // Max OSD zoom: at this zoom, containerWidth screen pixels = MIN_SCALE_UM µm
-      // imagePixelsVisible = MIN_SCALE_UM / mpp
-      // zoom = containerWidth / imagePixelsVisible (in OSD normalized coords, scaled by image width)
-      // OSD zoom = viewportWidth / boundsWidth, where boundsWidth is in viewport coords (0..1 = full image width)
-      const imagePixelsAtMinScale = MIN_SCALE_UM / mpp
-      const minBoundsWidth = imagePixelsAtMinScale / imageWidth
+      const containerHeight = viewerInstance.value.container.clientHeight
+      // How many image pixels the viewport must show at minimum
+      const minImagePixelsVisible = containerWidth * MIN_SCALE_UM / (SCALE_BAR_PX * mpp)
+      // Convert to OSD viewport coords (image width = 1.0 in viewport coords)
+      const minBoundsWidth = minImagePixelsVisible / imageWidth
       if (paddedRect.width < minBoundsWidth) {
-        // Expand the rect centered on the ROI to meet the minimum scale
+        // Expand the rect centered on the ROI
         const cx = paddedRect.x + paddedRect.width / 2
         const cy = paddedRect.y + paddedRect.height / 2
-        const aspectRatio = containerWidth / viewerInstance.value.container.clientHeight
+        const aspectRatio = containerWidth / containerHeight
         const newWidth = minBoundsWidth
         const newHeight = newWidth / aspectRatio
         paddedRect.x = cx - newWidth / 2
