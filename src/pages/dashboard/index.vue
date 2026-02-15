@@ -72,11 +72,6 @@
                 @click="showProfile = true"
               />
               <v-list-item
-                prepend-icon="mdi-chart-box-outline"
-                title="Relatórios"
-                @click="goToReports"
-              />
-              <v-list-item
                 prepend-icon="mdi-cog-outline"
                 title="Configurações"
                 @click="goToSettings"
@@ -262,13 +257,11 @@
                 :key="caseItem.id"
                 :case-item="caseItem"
                 :active-tab="activeTab"
-                :downloading-report="downloadingReport"
                 :processing-info="getCaseProcessingInfo(caseItem.id)"
                 :thumbnail-urls="getThumbnailUrls(caseItem.id)"
                 @add-slides="openAddSlidesDialog(caseItem)"
                 @click="openCase(caseItem)"
                 @confirm-delete="confirmDeleteCase(caseItem)"
-                @download-report="downloadReport(caseItem)"
                 @drag-end="handleCardDragEnd"
                 @drag-start="(e: DragEvent) => handleCardDragStart(e, caseItem)"
                 @invite-collaborator="openInviteCollaboratorDialog(caseItem)"
@@ -926,19 +919,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Report Download Snackbar -->
-    <v-snackbar
-      v-model="reportSnackbar.show"
-      :color="reportSnackbar.color"
-      location="bottom"
-      timeout="3000"
-    >
-      <v-icon class="mr-2">{{ reportSnackbar.color === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
-      {{ reportSnackbar.message }}
-      <template #actions>
-        <v-btn variant="text" @click="reportSnackbar.show = false">Fechar</v-btn>
-      </template>
-    </v-snackbar>
   </div>
 </template>
 
@@ -1015,14 +995,6 @@
   }>>([])
   const isSearchingCollaborators = ref(false)
   const isInvitingCollaborator = ref(false)
-
-  // Report download state
-  const downloadingReport = ref<string | null>(null)
-  const reportSnackbar = ref<{ show: boolean, message: string, color: string }>({
-    show: false,
-    message: '',
-    color: 'success',
-  })
 
   // Add slides to existing case state
   const showAddSlidesDialog = ref(false)
@@ -1167,23 +1139,8 @@
 
   // Filter & Sort Options (based on draft for the menu)
   const statusOptions = computed(() => {
-    if (draftOwnershipFilter.value === 'mine') {
-      return [
-        { label: 'Novo', value: 'novo' },
-        { label: 'Em Análise', value: 'em_analise' },
-        { label: 'Concluído', value: 'concluido' },
-      ]
-    } else if (draftOwnershipFilter.value === 'collab') {
-      return [
-        { label: 'Novo', value: 'novo' },
-        { label: 'Em Análise', value: 'em_analise' },
-        { label: 'Concluído', value: 'concluido' },
-      ]
-    }
     return [
       { label: 'Novo', value: 'novo' },
-      { label: 'Em Análise', value: 'em_analise' },
-      { label: 'Concluído', value: 'concluido' },
     ]
   })
 
@@ -1393,83 +1350,6 @@
     return 'mdi-check-circle'
   }
 
-  // Report/Laudo helper functions
-  function getReportIcon (status: string): string {
-    switch (status) {
-      case 'concluido': {
-        return 'mdi-file-download'
-      }
-      case 'em_analise': {
-        return 'mdi-file-clock'
-      }
-      default: {
-        return 'mdi-file-document-outline'
-      }
-    }
-  }
-
-  function getReportButtonColor (status: string): string {
-    switch (status) {
-      case 'concluido': {
-        return 'success'
-      }
-      case 'em_analise': {
-        return 'warning'
-      }
-      default: {
-        return 'grey'
-      }
-    }
-  }
-
-  function getReportTooltip (status: string): string {
-    switch (status) {
-      case 'concluido': {
-        return 'Baixar Laudo (PDF)'
-      }
-      case 'em_analise': {
-        return 'Laudo em elaboração'
-      }
-      default: {
-        return 'Laudo não iniciado'
-      }
-    }
-  }
-
-  async function downloadReport (caseItem: CaseDisplay) {
-    if (caseItem.status !== 'concluido') return
-
-    downloadingReport.value = caseItem.id
-
-    try {
-      const token = localStorage.getItem('supernavi_token')
-      const response = await fetch(`${API_BASE_URL}/cases/${caseItem.id}/report/pdf?token=${token}`)
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        const errorMessage = errorData?.error?.message || 'Falha ao gerar PDF'
-        throw new Error(errorMessage)
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `laudo_${caseItem.caseNumber}.pdf`
-      document.body.append(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      a.remove()
-
-      // Show success feedback
-      reportSnackbar.value = { show: true, message: 'Laudo baixado com sucesso!', color: 'success' }
-    } catch (error: any) {
-      console.error('[Dashboard] Failed to download report:', error)
-      reportSnackbar.value = { show: true, message: error.message || 'Erro ao baixar laudo', color: 'error' }
-    } finally {
-      downloadingReport.value = null
-    }
-  }
 
   function formatDate (date: Date | string): string {
     const d = typeof date === 'string' ? new Date(date) : date
@@ -2363,11 +2243,7 @@
       addSlidesFiles.value = []
       addSlidesToCase.value = null
 
-      reportSnackbar.value = {
-        show: true,
-        message: `${totalFiles} lâmina(s) adicionada(s) ao caso ${targetCase.caseNumber}`,
-        color: 'success',
-      }
+      showSuccessMessage(`${totalFiles} lâmina(s) adicionada(s) ao caso ${targetCase.caseNumber}`)
     } catch (error: any) {
       console.error('[Dashboard] Failed to add slides:', error)
       isUploading.value = false
@@ -2447,9 +2323,7 @@
     console.log('[Dashboard] Invitation declined:', invitation.relatedCaseId)
   }
 
-  function goToReports () {
-    router.push('/dashboard/reports')
-  }
+
 
   function goToSettings () {
     router.push('/dashboard/settings')

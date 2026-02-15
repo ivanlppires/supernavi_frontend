@@ -123,26 +123,6 @@
 
       <!-- Status & Ownership -->
       <div class="card-footer">
-        <div class="footer-left">
-          <span class="status-badge" :class="statusClass">
-            {{ statusLabel }}
-          </span>
-          <!-- Report Badge -->
-          <button
-            class="report-badge"
-            :class="{
-              loading: downloadingReport === caseItem.id,
-              disabled: caseItem.status !== 'concluido'
-            }"
-            :disabled="caseItem.status !== 'concluido' || downloadingReport === caseItem.id"
-            :title="caseItem.status === 'concluido' ? 'Baixar laudo' : 'Laudo não disponível'"
-            @click.stop="caseItem.status === 'concluido' && $emit('download-report')"
-          >
-            <v-icon v-if="downloadingReport !== caseItem.id" size="12">mdi-file-document-outline</v-icon>
-            <v-progress-circular v-else indeterminate size="12" width="2" />
-            <span>Laudo</span>
-          </button>
-        </div>
         <span class="ownership-badge" :class="{ 'is-owner': caseItem.isOwner }">
           <v-icon size="12">{{ caseItem.isOwner ? 'mdi-account' : 'mdi-account-group' }}</v-icon>
           {{ caseItem.isOwner ? 'Meu caso' : (caseItem.ownerName || 'Colaboração') }}
@@ -168,17 +148,6 @@
       >
         <v-icon size="18">mdi-account-plus</v-icon>
       </button>
-      <button
-        v-if="caseItem.status === 'concluido'"
-        class="action-btn download"
-        :class="{ loading: downloadingReport === caseItem.id }"
-        :disabled="downloadingReport === caseItem.id"
-        title="Baixar relatório"
-        @click="$emit('download-report')"
-      >
-        <v-icon v-if="downloadingReport !== caseItem.id" size="18">mdi-file-download</v-icon>
-        <v-progress-circular v-else indeterminate size="18" width="2" />
-      </button>
       <button class="action-btn more" title="Mais opções" @click.stop="showContextMenu = !showContextMenu">
         <v-icon size="18">mdi-dots-horizontal</v-icon>
       </button>
@@ -188,18 +157,6 @@
         <div v-if="showContextMenu" class="apple-context-menu" @click.stop>
           <div class="menu-backdrop" @click="showContextMenu = false" />
           <div class="menu-content">
-            <!-- Download Report Option -->
-            <button
-              v-if="caseItem.status === 'concluido'"
-              class="menu-item"
-              :class="{ loading: downloadingReport === caseItem.id }"
-              :disabled="downloadingReport === caseItem.id"
-              @click="handleDownloadReport"
-            >
-              <v-icon v-if="downloadingReport !== caseItem.id" size="16">mdi-file-download-outline</v-icon>
-              <v-progress-circular v-else indeterminate size="16" width="2" />
-              <span>Baixar Laudo</span>
-            </button>
             <!-- Invite Collaborator Option (only for owners) -->
             <button
               v-if="caseItem.isOwner && activeTab !== 'trash'"
@@ -209,7 +166,7 @@
               <v-icon size="16">mdi-account-plus-outline</v-icon>
               <span>Convidar Colaborador</span>
             </button>
-            <div v-if="caseItem.status === 'concluido' || (caseItem.isOwner && activeTab !== 'trash')" class="menu-divider" />
+            <div v-if="caseItem.isOwner && activeTab !== 'trash'" class="menu-divider" />
             <button
               v-if="activeTab !== 'archived'"
               class="menu-item"
@@ -279,7 +236,6 @@
   const props = defineProps<{
     caseItem: CaseDisplay
     activeTab: 'inbox' | 'archived' | 'trash'
-    downloadingReport: string | null
     processingInfo: ProcessingInfo
     thumbnailUrls: string[]
   }>()
@@ -288,7 +244,6 @@
     'add-slides': []
     'click': []
     'confirm-delete': []
-    'download-report': []
     'drag-end': [event: DragEvent]
     'drag-start': [event: DragEvent]
     'invite-collaborator': []
@@ -377,23 +332,6 @@
 
   const slidesCount = computed(() => props.caseItem.slidesCount || 0)
 
-  const statusClass = computed(() => {
-    switch (props.caseItem.status) {
-      case 'novo': return 'status-new'
-      case 'em_analise': return 'status-analysis'
-      case 'concluido': return 'status-complete'
-      default: return ''
-    }
-  })
-
-  const statusLabel = computed(() => {
-    switch (props.caseItem.status) {
-      case 'novo': return 'Novo'
-      case 'em_analise': return 'Em Análise'
-      case 'concluido': return 'Concluído'
-      default: return props.caseItem.status || 'Desconhecido'
-    }
-  })
 
   function formatDate (dateString: string): string {
     const date = new Date(dateString)
@@ -410,11 +348,6 @@
     } else {
       return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
     }
-  }
-
-  function handleDownloadReport () {
-    showContextMenu.value = false
-    emit('download-report')
   }
 
   function handleInviteCollaborator () {
