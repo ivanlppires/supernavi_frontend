@@ -264,7 +264,6 @@
                 @confirm-delete="confirmDeleteCase(caseItem)"
                 @drag-end="handleCardDragEnd"
                 @drag-start="(e: DragEvent) => handleCardDragStart(e, caseItem)"
-                @invite-collaborator="openInviteCollaboratorDialog(caseItem)"
                 @move-to="(location) => moveCaseToLocation(caseItem, location)"
                 @thumbnail-error="handleThumbnailError"
               />
@@ -536,87 +535,6 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-
-    <!-- Invite Collaborator Dialog -->
-    <v-dialog v-model="showInviteCollaboratorDialog" max-width="440">
-      <v-card class="invite-collaborator-dialog">
-        <v-card-title class="d-flex align-center justify-space-between">
-          <span>Convidar Colaborador</span>
-          <v-btn icon size="small" variant="text" @click="closeInviteCollaboratorDialog">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text>
-          <p v-if="inviteCollaboratorCase" class="case-info mb-4">
-            <v-icon class="mr-1" size="16">mdi-folder-outline</v-icon>
-            {{ inviteCollaboratorCase.caseNumber }} - {{ inviteCollaboratorCase.patientName }}
-          </p>
-
-          <v-text-field
-            v-model="collaboratorSearch"
-            autofocus
-            class="mb-2"
-            clearable
-            density="compact"
-            hide-details
-            label="Buscar por nome ou email"
-            prepend-inner-icon="mdi-magnify"
-            variant="outlined"
-            @update:model-value="searchCollaborators"
-          />
-
-          <div v-if="isSearchingCollaborators" class="search-loading">
-            <v-progress-circular indeterminate size="20" width="2" />
-            <span class="ml-2">Buscando...</span>
-          </div>
-
-          <div v-else-if="collaboratorSearchResults.length > 0" class="search-results">
-            <div
-              v-for="user in collaboratorSearchResults"
-              :key="user.id"
-              class="user-result"
-              @click="inviteCollaborator(user.id)"
-            >
-              <div class="user-avatar-small" :class="{ 'has-image': user.avatarUrl }">
-                <img
-                  v-if="user.avatarUrl"
-                  alt="Avatar"
-                  class="avatar-img"
-                  referrerpolicy="no-referrer"
-                  :src="user.avatarUrl"
-                  @error="($event.target as HTMLImageElement).style.display = 'none'"
-                >
-                <span v-else class="avatar-initials">{{ user.name.charAt(0).toUpperCase() }}</span>
-              </div>
-              <div class="user-info">
-                <span class="user-name">{{ user.name }}</span>
-                <span class="user-email">{{ user.email }}</span>
-                <span v-if="user.specialization" class="user-spec">{{ user.specialization }}</span>
-              </div>
-              <v-icon class="add-icon" color="primary" size="20">mdi-plus-circle-outline</v-icon>
-            </div>
-          </div>
-
-          <div v-else-if="collaboratorSearch.length >= 2" class="no-results">
-            <v-icon color="grey" size="32">mdi-account-search-outline</v-icon>
-            <p>Nenhum usuário encontrado</p>
-          </div>
-
-          <div v-else class="search-hint">
-            <p>Digite pelo menos 2 caracteres para buscar</p>
-          </div>
-        </v-card-text>
-
-        <v-card-actions v-if="isInvitingCollaborator">
-          <v-spacer />
-          <v-progress-circular indeterminate size="24" width="2" />
-          <span class="ml-2">Adicionando...</span>
-          <v-spacer />
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
 
     <!-- Upload Progress Dialog -->
     <v-dialog v-model="isUploading" max-width="580" persistent>
@@ -930,7 +848,6 @@
   import { casesApi } from '@/api/cases'
   import { type UploadController, uploadFileToEdge, uploadFileToS3, type UploadProgress } from '@/api/s3'
   import { slidesApi } from '@/api/slides'
-  import { usersApi } from '@/api/users'
   import EdgeStatusBadge from '@/components/EdgeStatusBadge.vue'
   import { type CaseDisplay, useCases } from '@/composables/useCases'
   import { useEdgeStatus } from '@/composables/useEdgeStatus'
@@ -981,20 +898,6 @@
   // Empty trash
   const showEmptyTrashConfirm = ref(false)
   const isEmptyingTrash = ref(false)
-
-  // Invite collaborator dialog
-  const showInviteCollaboratorDialog = ref(false)
-  const inviteCollaboratorCase = ref<CaseDisplay | null>(null)
-  const collaboratorSearch = ref('')
-  const collaboratorSearchResults = ref<Array<{
-    id: string
-    email: string
-    name: string
-    avatarUrl: string | null
-    specialization: string | null
-  }>>([])
-  const isSearchingCollaborators = ref(false)
-  const isInvitingCollaborator = ref(false)
 
   // Add slides to existing case state
   const showAddSlidesDialog = ref(false)
@@ -2456,63 +2359,6 @@
     console.log(`[Dashboard] Lixeira limpa: ${successCount} excluídos, ${failCount} falhas`)
   }
 
-  // Invite collaborator functions
-  function openInviteCollaboratorDialog (caseItem: CaseDisplay) {
-    inviteCollaboratorCase.value = caseItem
-    collaboratorSearch.value = ''
-    collaboratorSearchResults.value = []
-    showInviteCollaboratorDialog.value = true
-  }
-
-  function closeInviteCollaboratorDialog () {
-    showInviteCollaboratorDialog.value = false
-    inviteCollaboratorCase.value = null
-    collaboratorSearch.value = ''
-    collaboratorSearchResults.value = []
-  }
-
-  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
-
-  async function searchCollaborators () {
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer)
-    }
-
-    const query = collaboratorSearch.value.trim()
-    if (query.length < 2) {
-      collaboratorSearchResults.value = []
-      return
-    }
-
-    searchDebounceTimer = setTimeout(async () => {
-      isSearchingCollaborators.value = true
-      try {
-        collaboratorSearchResults.value = await usersApi.search(query)
-      } catch (err) {
-        console.error('[Dashboard] Erro ao buscar colaboradores:', err)
-        collaboratorSearchResults.value = []
-      } finally {
-        isSearchingCollaborators.value = false
-      }
-    }, 300)
-  }
-
-  async function inviteCollaborator (userId: string) {
-    if (!inviteCollaboratorCase.value) return
-
-    isInvitingCollaborator.value = true
-    try {
-      await casesApi.addCollaborator(inviteCollaboratorCase.value.id, userId, 'collaborator')
-      console.log('[Dashboard] Colaborador adicionado com sucesso')
-      closeInviteCollaboratorDialog()
-      // Refresh cases to show updated collaborators
-      await casesStore.fetchCases()
-    } catch (err) {
-      console.error('[Dashboard] Erro ao adicionar colaborador:', err)
-    } finally {
-      isInvitingCollaborator.value = false
-    }
-  }
 
   onMounted(async () => {
     // Initialize auth from storage and validate token
@@ -4464,130 +4310,6 @@ $color-accent: #34C759;
 
   .inline-edit {
     flex: 1;
-  }
-}
-
-// Invite Collaborator Dialog
-.invite-collaborator-dialog {
-  .case-info {
-    font-size: 0.875rem;
-    color: rgb(var(--v-theme-on-surface-variant));
-    display: flex;
-    align-items: center;
-  }
-
-  .search-loading,
-  .no-results,
-  .search-hint {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    gap: 8px;
-    color: rgb(var(--v-theme-on-surface-variant));
-
-    p {
-      margin: 0;
-      font-size: 0.875rem;
-    }
-  }
-
-  .search-loading {
-    flex-direction: row;
-  }
-
-  .search-results {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    max-height: 280px;
-    overflow-y: auto;
-  }
-
-  .user-result {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-
-    &:hover {
-      background: rgba(var(--v-theme-on-surface), 0.04);
-
-      .add-icon {
-        opacity: 1;
-      }
-    }
-  }
-
-  .user-avatar-small {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgb(var(--v-theme-secondary)) 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    overflow: hidden;
-
-    &.has-image {
-      background: transparent;
-    }
-
-    .avatar-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .avatar-initials {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: white;
-    }
-  }
-
-  .user-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .user-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: rgb(var(--v-theme-on-surface));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .user-email {
-    font-size: 0.75rem;
-    color: rgb(var(--v-theme-on-surface-variant));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .user-spec {
-    font-size: 0.7rem;
-    color: rgb(var(--v-theme-primary));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .add-icon {
-    opacity: 0.5;
-    transition: opacity 0.15s ease;
-    flex-shrink: 0;
   }
 }
 

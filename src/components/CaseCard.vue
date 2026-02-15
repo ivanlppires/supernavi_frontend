@@ -108,8 +108,8 @@
         <span class="case-date">{{ formatDate(caseItem.createdAt) }}</span>
       </div>
 
-      <!-- Patient Info -->
-      <div v-if="caseItem.patientAge || caseItem.patientSex" class="patient-info">
+      <!-- Patient Info & Ownership -->
+      <div class="patient-info">
         <span v-if="caseItem.patientAge" class="info-pill">
           <v-icon class="info-icon" size="11">mdi-cake-variant-outline</v-icon>
           {{ caseItem.patientAge }} anos
@@ -119,12 +119,9 @@
           <v-icon class="info-icon" size="11">{{ caseItem.patientSex === 'M' ? 'mdi-gender-male' : 'mdi-gender-female' }}</v-icon>
           {{ caseItem.patientSex === 'M' ? 'Masc.' : 'Fem.' }}
         </span>
-      </div>
-
-      <!-- Status & Ownership -->
-      <div class="card-footer">
+        <span v-if="caseItem.patientAge || caseItem.patientSex" class="info-separator">·</span>
         <span class="ownership-badge" :class="{ 'is-owner': caseItem.isOwner }">
-          <v-icon size="12">{{ caseItem.isOwner ? 'mdi-account' : 'mdi-account-group' }}</v-icon>
+          <v-icon size="11">{{ caseItem.isOwner ? 'mdi-account' : 'mdi-account-group' }}</v-icon>
           {{ caseItem.isOwner ? 'Meu caso' : (caseItem.ownerName || 'Colaboração') }}
         </span>
       </div>
@@ -140,15 +137,7 @@
       >
         <v-icon size="18">mdi-image-plus</v-icon>
       </button>
-      <button
-        v-if="caseItem.isOwner && activeTab !== 'trash'"
-        class="action-btn share"
-        title="Convidar colaborador"
-        @click="handleInviteCollaborator"
-      >
-        <v-icon size="18">mdi-account-plus</v-icon>
-      </button>
-      <button class="action-btn more" title="Mais opções" @click.stop="showContextMenu = !showContextMenu">
+<button class="action-btn more" title="Mais opções" @click.stop="showContextMenu = !showContextMenu">
         <v-icon size="18">mdi-dots-horizontal</v-icon>
       </button>
 
@@ -157,16 +146,6 @@
         <div v-if="showContextMenu" class="apple-context-menu" @click.stop>
           <div class="menu-backdrop" @click="showContextMenu = false" />
           <div class="menu-content">
-            <!-- Invite Collaborator Option (only for owners) -->
-            <button
-              v-if="caseItem.isOwner && activeTab !== 'trash'"
-              class="menu-item"
-              @click="handleInviteCollaborator"
-            >
-              <v-icon size="16">mdi-account-plus-outline</v-icon>
-              <span>Convidar Colaborador</span>
-            </button>
-            <div v-if="caseItem.isOwner && activeTab !== 'trash'" class="menu-divider" />
             <button
               v-if="activeTab !== 'archived'"
               class="menu-item"
@@ -246,8 +225,7 @@
     'confirm-delete': []
     'drag-end': [event: DragEvent]
     'drag-start': [event: DragEvent]
-    'invite-collaborator': []
-    'move-to': [location: 'inbox' | 'archived' | 'trash']
+'move-to': [location: 'inbox' | 'archived' | 'trash']
     'thumbnail-error': []
   }>()
 
@@ -348,11 +326,6 @@
     } else {
       return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
     }
-  }
-
-  function handleInviteCollaborator () {
-    showContextMenu.value = false
-    emit('invite-collaborator')
   }
 
   function handleDragStart (event: DragEvent) {
@@ -697,7 +670,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 10px;
+    flex-wrap: wrap;
   }
 
   .info-pill {
@@ -720,104 +693,18 @@
     opacity: 0.4;
   }
 
-  .card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .status-badge {
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    // Default style (fallback)
-    background: rgba(var(--v-theme-on-surface), 0.08);
-    color: rgba(var(--v-theme-on-surface), 0.6);
-
-    &.status-new {
-      background: rgba(var(--v-theme-info), 0.12);
-      color: rgb(var(--v-theme-info));
-    }
-
-    &.status-analysis {
-      background: rgba(var(--v-theme-warning), 0.12);
-      color: rgb(var(--v-theme-warning));
-    }
-
-    &.status-complete {
-      background: rgba(var(--v-theme-success), 0.12);
-      color: rgb(var(--v-theme-success));
-    }
-  }
-
-  .footer-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .report-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: none;
-    border-radius: 6px;
-    font-size: 10px;
-    font-weight: 600;
-    background: rgba(var(--v-theme-primary), 0.12);
-    color: rgb(var(--v-theme-primary));
-    cursor: pointer;
-    transition: all 0.15s ease;
-
-    &:hover:not(.disabled) {
-      background: rgba(var(--v-theme-primary), 0.2);
-      transform: scale(1.02);
-    }
-
-    &:active:not(.disabled) {
-      transform: scale(0.98);
-    }
-
-    &.loading {
-      cursor: wait;
-      opacity: 0.7;
-    }
-
-    &.disabled {
-      background: rgba(var(--v-theme-on-surface), 0.06);
-      color: rgba(var(--v-theme-on-surface), 0.35);
-      cursor: not-allowed;
-    }
-
-    .v-icon {
-      font-size: 12px;
-    }
-  }
-
   .ownership-badge {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    // Collaboration style - orange/amber to stand out
-    background: rgba(255, 149, 0, 0.12);
+    gap: 3px;
+    font-size: 12px;
+    font-weight: 400;
     color: #ff9500;
-    border: 1px solid rgba(255, 149, 0, 0.2);
+    opacity: 0.75;
 
     &.is-owner {
-      // Owner style - subtle, just text
-      background: transparent;
       color: rgb(var(--v-theme-on-surface-variant));
-      border: none;
-      opacity: 0.6;
+      opacity: 0.65;
     }
   }
 
