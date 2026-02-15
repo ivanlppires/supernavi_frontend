@@ -25,6 +25,7 @@ export interface User {
   crm: string | null
   specialization: string | null
   createdAt: string
+  edgeId: string | null
 }
 
 export interface UserSettings {

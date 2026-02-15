@@ -1,10 +1,23 @@
 import { computed, ref, type Ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 /**
- * Edge agent configuration from environment
+ * Edge agent configuration from environment (fallback for dev)
  */
-const EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
+const ENV_EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
 const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 500
+
+/**
+ * Get the edge agent ID: prefers user profile, falls back to env var
+ */
+function getEdgeAgentId (): string {
+  try {
+    const authStore = useAuthStore()
+    return authStore.user?.edgeId || ENV_EDGE_AGENT_ID
+  } catch {
+    return ENV_EDGE_AGENT_ID
+  }
+}
 
 /**
  * Tile source origin (where tiles are being loaded from)
@@ -257,17 +270,18 @@ export function useEdgeFirstTileSource () {
       }
 
       // Step 2: Check if edge agent is available
-      const edgeOk = await checkEdgeHealth(EDGE_AGENT_ID, EDGE_HEALTH_TIMEOUT_MS)
+      const agentId = getEdgeAgentId()
+      const edgeOk = await checkEdgeHealth(agentId, EDGE_HEALTH_TIMEOUT_MS)
       edgeAvailable.value = edgeOk
 
       if (edgeOk && edgeSlideId) {
         // Step 3a: Try to load from local edge using edge slide ID
         try {
-          const localManifest = await fetchLocalManifest(EDGE_AGENT_ID, edgeSlideId)
+          const localManifest = await fetchLocalManifest(agentId, edgeSlideId)
           manifest.value = localManifest
 
-          tileSource.value = createLocalTileSource(EDGE_AGENT_ID, edgeSlideId, localManifest)
-          thumbnailUrl.value = `/edge/${EDGE_AGENT_ID}/v1/slides/${edgeSlideId}/thumb`
+          tileSource.value = createLocalTileSource(agentId, edgeSlideId, localManifest)
+          thumbnailUrl.value = `/edge/${agentId}/v1/slides/${edgeSlideId}/thumb`
           origin.value = 'local'
 
           console.log('[EdgeFirst] Loaded from LOCAL edge (full resolution available)')
@@ -328,7 +342,8 @@ export function useEdgeFirstTileSource () {
 
     try {
       if (source === 'local') {
-        if (!EDGE_AGENT_ID) {
+        const agentId = getEdgeAgentId()
+        if (!agentId) {
           throw new Error('No edge agent configured')
         }
 
@@ -340,11 +355,11 @@ export function useEdgeFirstTileSource () {
           throw new Error('Could not determine edge slide ID')
         }
 
-        const localManifest = await fetchLocalManifest(EDGE_AGENT_ID, edgeSlideId)
+        const localManifest = await fetchLocalManifest(agentId, edgeSlideId)
         manifest.value = localManifest
 
-        tileSource.value = createLocalTileSource(EDGE_AGENT_ID, edgeSlideId, localManifest)
-        thumbnailUrl.value = `/edge/${EDGE_AGENT_ID}/v1/slides/${edgeSlideId}/thumb`
+        tileSource.value = createLocalTileSource(agentId, edgeSlideId, localManifest)
+        thumbnailUrl.value = `/edge/${agentId}/v1/slides/${edgeSlideId}/thumb`
         origin.value = 'local'
         fallbackReason.value = null
       } else {
@@ -381,12 +396,12 @@ export function useEdgeFirstTileSource () {
   /**
    * Get the configured edge agent ID
    */
-  const edgeAgentId = computed(() => EDGE_AGENT_ID)
+  const edgeAgentId = computed(() => getEdgeAgentId())
 
   /**
    * Check if edge is configured
    */
-  const isEdgeConfigured = computed(() => !!EDGE_AGENT_ID)
+  const isEdgeConfigured = computed(() => !!getEdgeAgentId())
 
   /**
    * Get a human-readable status

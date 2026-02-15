@@ -1,10 +1,11 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 /**
- * Edge agent configuration from environment
+ * Edge agent configuration from environment (fallback for dev)
  */
 const API_URL = import.meta.env.VITE_API_URL || ''
-const EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
+const ENV_EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
 const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 2000
 const EDGE_STATUS_POLL_INTERVAL_MS = 30_000 // Poll every 30 seconds
 
@@ -26,6 +27,9 @@ const lastCheck = ref<Date | null>(null)
 const edgeConnected = ref(false)
 const edgeAgentInfo = ref<EdgeStatusInfo | null>(null)
 const error = ref<string | null>(null)
+
+// Dynamic edge agent ID: prefers user profile, falls back to env var
+const resolvedEdgeAgentId = ref(ENV_EDGE_AGENT_ID)
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 let isInitialized = false
@@ -59,11 +63,12 @@ async function checkEdgeStatus (): Promise<void> {
 
       // Response format: { connectedAgents: number, agents: [...] }
       const agents = data.agents || []
+      const targetId = resolvedEdgeAgentId.value
 
-      // Check if our configured agent is connected
-      if (EDGE_AGENT_ID && agents.length > 0) {
+      // Check if our target agent is connected
+      if (targetId && agents.length > 0) {
         const agent = agents.find(
-          (a: EdgeStatusInfo) => a.agentId === EDGE_AGENT_ID,
+          (a: EdgeStatusInfo) => a.agentId === targetId,
         )
 
         if (agent) {
@@ -79,7 +84,7 @@ async function checkEdgeStatus (): Promise<void> {
           edgeAgentInfo.value = null
         }
       } else if (agents.length > 0) {
-        // No specific agent configured, but some are connected
+        // No specific agent configured, auto-discover first connected
         const agent = agents[0]
         edgeConnected.value = true
         edgeAgentInfo.value = {
@@ -137,7 +142,8 @@ function stopPolling (): void {
  * Composable for global edge connection status
  *
  * Shows whether a local edge agent is connected to the cloud via tunnel.
- * This is independent of which slide is being viewed.
+ * The edge agent ID is auto-detected from the user's profile (derived from
+ * their slides), with fallback to VITE_EDGE_AGENT_ID env var and auto-discovery.
  *
  * Usage:
  * ```ts
@@ -147,6 +153,20 @@ function stopPolling (): void {
 export function useEdgeStatus () {
   // Initialize polling on first use
   onMounted(() => {
+    const authStore = useAuthStore()
+    if (authStore.user?.edgeId) {
+      resolvedEdgeAgentId.value = authStore.user.edgeId
+    }
+
+    // Watch for auth store changes (e.g. after login or profile refresh)
+    watch(() => authStore.userEdgeId, (newEdgeId) => {
+      const prev = resolvedEdgeAgentId.value
+      resolvedEdgeAgentId.value = newEdgeId || ENV_EDGE_AGENT_ID
+      if (resolvedEdgeAgentId.value !== prev) {
+        checkEdgeStatus()
+      }
+    })
+
     if (!isInitialized) {
       isInitialized = true
       startPolling()
@@ -154,9 +174,9 @@ export function useEdgeStatus () {
   })
 
   // Computed properties
-  const agentId = computed(() => edgeAgentInfo.value?.agentId || EDGE_AGENT_ID || null)
+  const agentId = computed(() => edgeAgentInfo.value?.agentId || resolvedEdgeAgentId.value || null)
 
-  const isConfigured = computed(() => !!EDGE_AGENT_ID)
+  const isConfigured = computed(() => !!resolvedEdgeAgentId.value)
 
   const status = computed(() => {
     if (isChecking.value) {
@@ -176,7 +196,7 @@ export function useEdgeStatus () {
       return 'Verificando...'
     }
     if (edgeConnected.value) {
-      const id = edgeAgentInfo.value?.agentId || EDGE_AGENT_ID
+      const id = edgeAgentInfo.value?.agentId || resolvedEdgeAgentId.value
       return `Agente Local (${id})`
     }
     return 'Cloud (sem agente local)'

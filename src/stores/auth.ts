@@ -12,6 +12,7 @@ export interface User {
   crm?: string
   specialization?: string
   createdAt: Date
+  edgeId?: string | null
 }
 
 // Transform API user to store user
@@ -25,6 +26,7 @@ function transformUser (apiUser: ApiUser): User {
     crm: apiUser.crm || undefined,
     specialization: apiUser.specialization || undefined,
     createdAt: new Date(apiUser.createdAt),
+    edgeId: apiUser.edgeId || null,
   }
 }
 
@@ -38,6 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Getters computados
   const userName = computed(() => user.value?.name ?? '')
+  const userEdgeId = computed(() => user.value?.edgeId ?? null)
   const userInitials = computed(() => {
     if (!user.value?.name) {
       return ''
@@ -236,6 +239,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Getters
     userName,
     userInitials,
+    userEdgeId,
 
     // Ações
     login,
