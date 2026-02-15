@@ -55,17 +55,13 @@
                 <span class="slide-id-text">{{ slide.name }}</span>
               </div>
               <v-icon v-if="slide.id === activeSlideId" class="check-icon" color="primary" size="16">mdi-check</v-icon>
-              <v-btn
+              <button
                 class="slide-unlink-btn"
-                color="warning"
-                icon
-                size="x-small"
                 title="Desvincular lâmina"
-                variant="text"
-                @click.stop="confirmUnlinkSlide(slide)"
+                @click.stop="confirmUnlinkSlide(slide, index)"
               >
-                <v-icon size="14">mdi-link-off</v-icon>
-              </v-btn>
+                <v-icon size="13">mdi-link-off</v-icon>
+              </button>
             </div>
           </div>
 
@@ -682,20 +678,6 @@
                 <span>{{ currentSlideLabel }}</span>
               </div>
 
-              <!-- Unlink current slide -->
-              <v-btn
-                block
-                class="mb-3"
-                color="warning"
-                density="compact"
-                prepend-icon="mdi-link-off"
-                size="small"
-                variant="tonal"
-                @click="confirmUnlinkSlide(caseSlides.find(s => s.id === activeSlideId))"
-              >
-                Desvincular lâmina
-              </v-btn>
-
               <!-- Slide Details -->
               <div class="details-card">
                 <template v-for="(detail, index) in slideDetails" :key="detail.label">
@@ -708,6 +690,15 @@
                   <v-divider v-if="index < slideDetails.length - 1" />
                 </template>
               </div>
+
+              <!-- Unlink action -->
+              <button
+                class="slide-unlink-action"
+                @click="confirmUnlinkSlide(caseSlides.find(s => s.id === activeSlideId), caseSlides.findIndex(s => s.id === activeSlideId))"
+              >
+                <v-icon size="14">mdi-link-off</v-icon>
+                <span>Desvincular do caso</span>
+              </button>
             </div>
           </div>
         </v-tabs-window-item>
@@ -1556,29 +1547,54 @@
     </v-dialog>
 
     <!-- Unlink Slide Confirmation Dialog -->
-    <v-dialog v-model="showUnlinkConfirm" max-width="400">
-      <v-card>
-        <v-card-title class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-link-off</v-icon>
-          Desvincular Lâmina
-        </v-card-title>
-        <v-card-text>
-          Tem certeza que deseja desvincular esta lâmina do caso? Ela ficará disponível para vincular a outro caso.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="showUnlinkConfirm = false">Cancelar</v-btn>
-          <v-btn
-            color="warning"
-            :loading="isUnlinkingSlide"
-            variant="tonal"
+    <v-dialog v-model="showUnlinkConfirm" max-width="380">
+      <div class="unlink-confirm-dialog">
+        <div class="unlink-confirm-icon-ring">
+          <v-icon color="warning" size="28">mdi-link-off</v-icon>
+        </div>
+
+        <h3 class="unlink-confirm-title">Desvincular lâmina?</h3>
+
+        <div v-if="slideToUnlink" class="unlink-confirm-slide-card">
+          <v-icon color="primary" size="16">mdi-image-outline</v-icon>
+          <div class="unlink-confirm-slide-info">
+            <span class="unlink-confirm-slide-label">Lâmina {{ slideToUnlinkIndex + 1 }}</span>
+            <span class="unlink-confirm-slide-name">{{ slideToUnlink.name }}</span>
+          </div>
+        </div>
+
+        <p class="unlink-confirm-description">
+          A lâmina será removida deste caso e ficará disponível para vincular a outro.
+        </p>
+
+        <div class="unlink-confirm-actions">
+          <button class="unlink-confirm-btn unlink-confirm-btn--cancel" @click="showUnlinkConfirm = false">
+            Cancelar
+          </button>
+          <button
+            class="unlink-confirm-btn unlink-confirm-btn--confirm"
+            :disabled="isUnlinkingSlide"
             @click="executeUnlinkSlide"
           >
-            Desvincular
-          </v-btn>
-        </v-card-actions>
-      </v-card>
+            <v-progress-circular v-if="isUnlinkingSlide" indeterminate size="14" width="2" />
+            <v-icon v-else size="15">mdi-link-off</v-icon>
+            <span>{{ isUnlinkingSlide ? 'Desvinculando...' : 'Desvincular' }}</span>
+          </button>
+        </div>
+      </div>
     </v-dialog>
+
+    <!-- Unlink Success Snackbar -->
+    <v-snackbar
+      v-model="showUnlinkSuccess"
+      color="surface"
+      :timeout="3000"
+    >
+      <div class="d-flex align-center ga-2">
+        <v-icon color="success" size="18">mdi-check-circle</v-icon>
+        <span class="text-body-2">{{ unlinkSuccessMessage }}</span>
+      </div>
+    </v-snackbar>
 
     <!-- Delete Confirmation Dialog -->
     <v-dialog v-model="showDeleteConfirm" max-width="400">
@@ -1799,28 +1815,37 @@
   // Unlink slide
   const showUnlinkConfirm = ref(false)
   const slideToUnlink = ref<any>(null)
+  const slideToUnlinkIndex = ref(0)
   const isUnlinkingSlide = ref(false)
+  const showUnlinkSuccess = ref(false)
+  const unlinkSuccessMessage = ref('')
 
-  function confirmUnlinkSlide (slide: any) {
+  function confirmUnlinkSlide (slide: any, index: number) {
     if (!slide) return
     slideToUnlink.value = slide
+    slideToUnlinkIndex.value = index
     showUnlinkConfirm.value = true
   }
 
   async function executeUnlinkSlide () {
     if (!slideToUnlink.value) return
     isUnlinkingSlide.value = true
+    const slideName = slideToUnlink.value.name
     try {
       await slidesApi.unlinkFromCase(slideToUnlink.value.id)
       const slides = viewerControls.state.value.slides
       const remaining = slides.filter((s: any) => s.id !== slideToUnlink.value.id)
       viewerControls.state.value.slides = remaining
+      showUnlinkConfirm.value = false
+
+      unlinkSuccessMessage.value = `"${slideName}" desvinculada do caso`
+      showUnlinkSuccess.value = true
+
       if (slideToUnlink.value.id === activeSlideId.value && remaining.length > 0) {
         selectSlide(remaining[0]!)
       } else if (remaining.length === 0) {
         router.push('/dashboard')
       }
-      showUnlinkConfirm.value = false
       slideToUnlink.value = null
     } catch (err) {
       console.error('[Viewer] Failed to unlink slide:', err)
@@ -3412,17 +3437,29 @@ $apple-duration-slow: 0.4s;
   }
 
   .slide-unlink-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(var(--v-theme-on-surface), 0.35);
+    cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: all 0.15s ease;
     flex-shrink: 0;
+
+    &:hover {
+      background: rgba(255, 149, 0, 0.12);
+      color: #ff9500;
+      opacity: 1 !important;
+    }
   }
 
   &:hover .slide-unlink-btn {
-    opacity: 0.6;
-  }
-
-  .slide-unlink-btn:hover {
-    opacity: 1 !important;
+    opacity: 0.7;
   }
 }
 
@@ -4426,6 +4463,155 @@ $apple-duration-slow: 0.4s;
 .detail-value {
   color: rgb(var(--v-theme-on-surface));
   word-break: break-word;
+}
+
+// Desktop unlink action link
+.slide-unlink-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: #ff9500;
+  }
+}
+
+// Unlink confirmation dialog
+.unlink-confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 20px;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 16px;
+  text-align: center;
+}
+
+.unlink-confirm-icon-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 149, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+.unlink-confirm-title {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(var(--v-theme-on-surface));
+  margin-bottom: 14px;
+}
+
+.unlink-confirm-slide-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.unlink-confirm-slide-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.unlink-confirm-slide-label {
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.unlink-confirm-slide-name {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unlink-confirm-description {
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin: 0 0 20px;
+}
+
+.unlink-confirm-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.unlink-confirm-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &--cancel {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    color: rgb(var(--v-theme-on-surface));
+
+    &:hover {
+      background: rgba(var(--v-theme-on-surface), 0.1);
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
+  }
+
+  &--confirm {
+    background: rgba(255, 149, 0, 0.12);
+    color: #ff9500;
+
+    &:hover {
+      background: rgba(255, 149, 0, 0.2);
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+  }
 }
 
 /* ========================================
