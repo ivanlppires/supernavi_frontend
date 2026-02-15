@@ -132,10 +132,10 @@
       <button
         v-if="activeTab !== 'trash'"
         class="action-btn add-slides"
-        title="Adicionar lâminas"
+        title="Vincular lâminas"
         @click="$emit('add-slides')"
       >
-        <v-icon size="18">mdi-image-plus</v-icon>
+        <v-icon size="18">mdi-link-plus</v-icon>
       </button>
 <button class="action-btn more" title="Mais opções" @click.stop="showContextMenu = !showContextMenu">
         <v-icon size="18">mdi-dots-horizontal</v-icon>

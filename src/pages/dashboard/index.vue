@@ -259,7 +259,7 @@
                 :active-tab="activeTab"
                 :processing-info="getCaseProcessingInfo(caseItem.id)"
                 :thumbnail-urls="getThumbnailUrls(caseItem.id)"
-                @add-slides="openAddSlidesDialog(caseItem)"
+                @add-slides="openLinkSlidesDialog(caseItem)"
                 @click="openCase(caseItem)"
                 @confirm-delete="confirmDeleteCase(caseItem)"
                 @drag-end="handleCardDragEnd"
@@ -754,68 +754,58 @@
       </div>
     </v-dialog>
 
-    <!-- Add Slides Dialog -->
-    <v-dialog v-model="showAddSlidesDialog" max-width="500" persistent>
+    <!-- Link Slides Dialog -->
+    <v-dialog v-model="showLinkSlidesDialog" max-width="500">
       <v-card>
         <v-card-title class="d-flex align-center">
-          <v-icon class="mr-2" color="primary">mdi-image-plus</v-icon>
-          Adicionar Lâminas
+          <v-icon class="mr-2" color="primary">mdi-link-plus</v-icon>
+          Vincular Lâminas
         </v-card-title>
-        <v-card-subtitle v-if="addSlidesToCase" class="pb-0">
-          Caso: <strong>{{ addSlidesToCase.caseNumber }}</strong> - {{ addSlidesToCase.patientName }}
+        <v-card-subtitle v-if="linkSlidesToCase" class="pb-0">
+          Caso: <strong>{{ linkSlidesToCase.caseNumber }}</strong> - {{ linkSlidesToCase.patientName }}
         </v-card-subtitle>
 
         <v-divider class="mt-3" />
 
         <v-card-text>
-          <input
-            ref="addSlidesInput"
-            accept=".svs,.tif,.tiff,.ndpi,.dzi"
-            hidden
-            multiple
-            type="file"
-            @change="handleAddSlidesSelect"
-          >
-
-          <!-- Drop zone -->
-          <div
-            class="add-slides-zone"
-            @click="triggerAddSlidesInput"
-          >
-            <v-icon color="primary" size="32">mdi-cloud-upload</v-icon>
-            <p class="mt-2 mb-0 text-body-2">Clique para selecionar arquivos</p>
-            <p class="text-caption text-medium-emphasis">SVS, TIFF, NDPI, DZI</p>
+          <div v-if="isLoadingUnlinked" class="d-flex justify-center align-center pa-8">
+            <v-progress-circular color="primary" indeterminate size="32" width="3" />
+            <span class="ml-3 text-body-2 text-medium-emphasis">Buscando lâminas disponíveis...</span>
           </div>
 
-          <!-- Selected files list -->
-          <div v-if="addSlidesFiles.length > 0" class="mt-4">
-            <p class="text-subtitle-2 mb-2">Arquivos selecionados:</p>
-            <v-list class="selected-files-list" density="compact">
-              <v-list-item
-                v-for="(file, index) in addSlidesFiles"
-                :key="index"
-                class="px-2"
+          <div v-else-if="unlinkedSlides.length === 0" class="d-flex flex-column align-center pa-8">
+            <v-icon color="grey-lighten-1" size="48">mdi-image-off-outline</v-icon>
+            <p class="mt-3 text-body-2 text-medium-emphasis">Nenhuma lâmina disponível para vincular</p>
+            <p class="text-caption text-medium-emphasis">Lâminas processadas sem caso aparecem aqui automaticamente</p>
+          </div>
+
+          <div v-else class="unlinked-slides-list">
+            <div
+              v-for="slide in unlinkedSlides"
+              :key="slide.slideId"
+              class="unlinked-slide-item"
+            >
+              <img
+                :alt="slide.filename"
+                class="unlinked-slide-thumb"
+                :src="`${CLOUD_BASE_URL}${slide.thumbUrl}`"
+                @error="($event.target as HTMLImageElement).style.display = 'none'"
               >
-                <template #prepend>
-                  <v-icon color="primary" size="20">mdi-file-image</v-icon>
-                </template>
-                <v-list-item-title class="text-body-2">{{ file.name }}</v-list-item-title>
-                <v-list-item-subtitle class="text-caption">
-                  {{ formatFileSize(file.size) }}
-                </v-list-item-subtitle>
-                <template #append>
-                  <v-btn
-                    color="error"
-                    icon
-                    size="x-small"
-                    variant="text"
-                    @click.stop="removeAddSlideFile(index)"
-                  >
-                    <v-icon size="18">mdi-close</v-icon>
-                  </v-btn>
-                </template>
-              </v-list-item>
-            </v-list>
+              <div class="unlinked-slide-info">
+                <span class="unlinked-slide-name">{{ slide.filename }}</span>
+                <span class="unlinked-slide-meta">{{ slide.width }} × {{ slide.height }} · {{ formatRelativeDate(slide.createdAt) }}</span>
+              </div>
+              <v-btn
+                color="primary"
+                :disabled="isLinkingSlide === slide.slideId"
+                :loading="isLinkingSlide === slide.slideId"
+                size="small"
+                variant="tonal"
+                @click="linkSlideToCase(slide.slideId)"
+              >
+                Vincular
+              </v-btn>
+            </div>
           </div>
         </v-card-text>
 
@@ -823,16 +813,7 @@
 
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="showAddSlidesDialog = false">Cancelar</v-btn>
-          <v-btn
-            color="primary"
-            :disabled="addSlidesFiles.length === 0"
-            variant="tonal"
-            @click="submitAddSlides"
-          >
-            <v-icon class="mr-1" size="18">mdi-upload</v-icon>
-            Enviar {{ addSlidesFiles.length > 0 ? `(${addSlidesFiles.length})` : '' }}
-          </v-btn>
+          <v-btn variant="text" @click="showLinkSlidesDialog = false">Fechar</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -899,11 +880,12 @@
   const showEmptyTrashConfirm = ref(false)
   const isEmptyingTrash = ref(false)
 
-  // Add slides to existing case state
-  const showAddSlidesDialog = ref(false)
-  const addSlidesToCase = ref<CaseDisplay | null>(null)
-  const addSlidesFiles = ref<File[]>([])
-  const addSlidesInput = ref<HTMLInputElement | null>(null)
+  // Link slides to case state
+  const showLinkSlidesDialog = ref(false)
+  const linkSlidesToCase = ref<CaseDisplay | null>(null)
+  const unlinkedSlides = ref<Array<{ slideId: string; filename: string; thumbUrl: string; width: number; height: number; createdAt: string }>>([])
+  const isLoadingUnlinked = ref(false)
+  const isLinkingSlide = ref<string | null>(null)
 
   const profileForm = ref({
     name: '',
@@ -1256,6 +1238,19 @@
 
   function formatDate (date: Date | string): string {
     const d = typeof date === 'string' ? new Date(date) : date
+    return new Intl.DateTimeFormat('pt-BR').format(d)
+  }
+
+  function formatRelativeDate (date: string): string {
+    const d = new Date(date)
+    const now = new Date()
+    const diffMs = now.getTime() - d.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    if (diffHours < 1) return 'agora'
+    if (diffHours < 24) return `${diffHours}h atrás`
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays === 1) return 'ontem'
+    if (diffDays < 7) return `${diffDays} dias atrás`
     return new Intl.DateTimeFormat('pt-BR').format(d)
   }
 
@@ -2012,145 +2007,36 @@
     showNewCaseDialog.value = true
   }
 
-  // Add slides to existing case functions
-  function openAddSlidesDialog (caseItem: CaseDisplay) {
-    addSlidesToCase.value = caseItem
-    addSlidesFiles.value = []
-    showAddSlidesDialog.value = true
-  }
-
-  function triggerAddSlidesInput () {
-    addSlidesInput.value?.click()
-  }
-
-  function handleAddSlidesSelect (event: Event) {
-    const input = event.target as HTMLInputElement
-    if (input.files && input.files.length > 0) {
-      addSlidesFiles.value = [...addSlidesFiles.value, ...Array.from(input.files)]
-    }
-    input.value = ''
-  }
-
-  function removeAddSlideFile (index: number) {
-    addSlidesFiles.value.splice(index, 1)
-  }
-
-  async function submitAddSlides () {
-    if (!addSlidesToCase.value || addSlidesFiles.value.length === 0) return
-
-    const targetCase = addSlidesToCase.value
-    showAddSlidesDialog.value = false
-
-    // Start upload process
-    processingCaseId.value = targetCase.caseNumber
-    uploadError.value = null
-    isUploading.value = true
+  // Link slides to case functions
+  async function openLinkSlidesDialog (caseItem: CaseDisplay) {
+    linkSlidesToCase.value = caseItem
+    unlinkedSlides.value = []
+    isLoadingUnlinked.value = true
+    showLinkSlidesDialog.value = true
 
     try {
-      const totalFiles = addSlidesFiles.value.length
-      let fileIndex = 0
+      unlinkedSlides.value = await slidesApi.listUnlinked()
+    } catch (err) {
+      console.error('[Dashboard] Failed to fetch unlinked slides:', err)
+    } finally {
+      isLoadingUnlinked.value = false
+    }
+  }
 
-      for (const file of addSlidesFiles.value) {
-        if (!file) continue
+  async function linkSlideToCase (slideId: string) {
+    if (!linkSlidesToCase.value) return
 
-        fileIndex++
-        const slideId = crypto.randomUUID()
-        const s3Key = `uploads/raw/${slideId}/${file.name}`
-
-        // Reset progress for new file
-        currentUploadFile.value = {
-          name: file.name,
-          index: fileIndex,
-          total: totalFiles,
-        }
-        uploadProgress.value = {
-          loaded: 0,
-          total: file.size,
-          percent: 0,
-          speed: 0,
-          elapsed: 0,
-          remaining: 0,
-        }
-
-        uploadController.value = { abort: () => {} }
-
-        // Upload to edge (local) or cloud (S3) based on connection status
-        if (edgeConnected.value) {
-          console.log(`[Dashboard] Uploading ${file.name} to Edge (local) for case ${targetCase.caseNumber}...`)
-
-          await uploadFileToEdge(
-            file,
-            EDGE_URL,
-            (progress: UploadProgress) => {
-              uploadProgress.value = progress
-            },
-            uploadController.value,
-          )
-
-          console.log(`[Dashboard] Upload complete to edge. Creating slide record...`)
-
-          // Create slide record in cloud
-          await casesApi.addSlide(targetCase.id, {
-            name: file.name.replace(/\.[^/.]+$/, ''),
-            originalFilename: file.name,
-            fileFormat: getFileFormat(file.name),
-            fileSize: file.size.toString(),
-            storagePath: `edge://${file.name}`,
-          })
-
-          console.log(`[Dashboard] Slide added to case ${targetCase.caseNumber}`)
-        } else {
-          console.log(`[Dashboard] Uploading ${file.name} to S3 for case ${targetCase.caseNumber}...`)
-
-          await uploadFileToS3(
-            file,
-            s3Key,
-            (progress: UploadProgress) => {
-              uploadProgress.value = progress
-            },
-            uploadController.value,
-          )
-
-          console.log(`[Dashboard] Upload complete, creating slide record...`)
-
-          // Create slide in API
-          await casesApi.addSlide(targetCase.id, {
-            name: file.name.replace(/\.[^/.]+$/, ''),
-            originalFilename: file.name,
-            fileFormat: getFileFormat(file.name),
-            fileSize: file.size.toString(),
-            storagePath: s3Key,
-          })
-
-          console.log(`[Dashboard] Slide added to case ${targetCase.caseNumber}`)
-        }
-      }
-
-      // All uploads complete
-      isUploading.value = false
-      isProcessing.value = true
-      processingStep.value = 1
-
-      setTimeout(() => {
-        processingStep.value = 2
-        setTimeout(() => {
-          isProcessing.value = false
-          processingStep.value = 0
-          processingCaseId.value = ''
-          // Refresh cases to show updated slide count
-          casesStore.fetchCases({ forceRefresh: true })
-        }, 2000)
-      }, 2000)
-
-      // Clear form
-      addSlidesFiles.value = []
-      addSlidesToCase.value = null
-
-      showSuccessMessage(`${totalFiles} lâmina(s) adicionada(s) ao caso ${targetCase.caseNumber}`)
-    } catch (error: any) {
-      console.error('[Dashboard] Failed to add slides:', error)
-      isUploading.value = false
-      uploadError.value = error.message || 'Erro ao adicionar lâminas'
+    isLinkingSlide.value = slideId
+    try {
+      await slidesApi.linkToCase(slideId, linkSlidesToCase.value.id)
+      unlinkedSlides.value = unlinkedSlides.value.filter(s => s.slideId !== slideId)
+      showSuccessMessage('Lâmina vinculada ao caso com sucesso')
+      // Refresh to show updated slide count
+      await fetchAllCasesSlides()
+    } catch (err) {
+      console.error('[Dashboard] Failed to link slide:', err)
+    } finally {
+      isLinkingSlide.value = null
     }
   }
 
@@ -2987,26 +2873,56 @@ $color-accent: #34C759;
 }
 
 // Add slides dialog styles
-.add-slides-zone {
-  border: 2px dashed rgba(var(--v-theme-primary), 0.3);
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: rgba(var(--v-theme-primary), 0.02);
+.unlinked-slides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.unlinked-slide-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
 
   &:hover {
-    border-color: rgb(var(--v-theme-primary));
-    background: rgba(var(--v-theme-primary), 0.05);
+    background: rgba(var(--v-theme-on-surface), 0.04);
   }
 }
 
-.selected-files-list {
-  max-height: 200px;
-  overflow-y: auto;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  border-radius: 8px;
+.unlinked-slide-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  flex-shrink: 0;
+}
+
+.unlinked-slide-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.unlinked-slide-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unlinked-slide-meta {
+  font-size: 0.75rem;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 .upload-content {

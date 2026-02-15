@@ -55,6 +55,17 @@
                 <span class="slide-id-text">{{ slide.name }}</span>
               </div>
               <v-icon v-if="slide.id === activeSlideId" class="check-icon" color="primary" size="16">mdi-check</v-icon>
+              <v-btn
+                class="slide-unlink-btn"
+                color="warning"
+                icon
+                size="x-small"
+                title="Desvincular lâmina"
+                variant="text"
+                @click.stop="confirmUnlinkSlide(slide)"
+              >
+                <v-icon size="14">mdi-link-off</v-icon>
+              </v-btn>
             </div>
           </div>
 
@@ -670,6 +681,20 @@
                 <v-icon color="primary" size="16">mdi-image-outline</v-icon>
                 <span>{{ currentSlideLabel }}</span>
               </div>
+
+              <!-- Unlink current slide -->
+              <v-btn
+                block
+                class="mb-3"
+                color="warning"
+                density="compact"
+                prepend-icon="mdi-link-off"
+                size="small"
+                variant="tonal"
+                @click="confirmUnlinkSlide(caseSlides.find(s => s.id === activeSlideId))"
+              >
+                Desvincular lâmina
+              </v-btn>
 
               <!-- Slide Details -->
               <div class="details-card">
@@ -1530,6 +1555,31 @@
       </v-card>
     </v-dialog>
 
+    <!-- Unlink Slide Confirmation Dialog -->
+    <v-dialog v-model="showUnlinkConfirm" max-width="400">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="warning">mdi-link-off</v-icon>
+          Desvincular Lâmina
+        </v-card-title>
+        <v-card-text>
+          Tem certeza que deseja desvincular esta lâmina do caso? Ela ficará disponível para vincular a outro caso.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showUnlinkConfirm = false">Cancelar</v-btn>
+          <v-btn
+            color="warning"
+            :loading="isUnlinkingSlide"
+            variant="tonal"
+            @click="executeUnlinkSlide"
+          >
+            Desvincular
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Delete Confirmation Dialog -->
     <v-dialog v-model="showDeleteConfirm" max-width="400">
       <v-card>
@@ -1559,6 +1609,7 @@
   import { useDisplay, useTheme } from 'vuetify'
   import { useViewer } from '@/composables/useViewer'
   import { annotationsApi } from '@/api/annotations'
+  import { slidesApi } from '@/api/slides'
   import type { Annotation as ApiAnnotation, Message as ApiMessage } from '@/api/types'
   import { useAuthStore } from '@/stores/auth'
 
@@ -1743,6 +1794,39 @@
     showDeleteConfirm.value = false
     // TODO: Delete from backend and navigate to dashboard
     router.push('/dashboard')
+  }
+
+  // Unlink slide
+  const showUnlinkConfirm = ref(false)
+  const slideToUnlink = ref<any>(null)
+  const isUnlinkingSlide = ref(false)
+
+  function confirmUnlinkSlide (slide: any) {
+    if (!slide) return
+    slideToUnlink.value = slide
+    showUnlinkConfirm.value = true
+  }
+
+  async function executeUnlinkSlide () {
+    if (!slideToUnlink.value) return
+    isUnlinkingSlide.value = true
+    try {
+      await slidesApi.unlinkFromCase(slideToUnlink.value.id)
+      const slides = viewerControls.state.value.slides
+      const remaining = slides.filter((s: any) => s.id !== slideToUnlink.value.id)
+      viewerControls.state.value.slides = remaining
+      if (slideToUnlink.value.id === activeSlideId.value && remaining.length > 0) {
+        selectSlide(remaining[0]!)
+      } else if (remaining.length === 0) {
+        router.push('/dashboard')
+      }
+      showUnlinkConfirm.value = false
+      slideToUnlink.value = null
+    } catch (err) {
+      console.error('[Viewer] Failed to unlink slide:', err)
+    } finally {
+      isUnlinkingSlide.value = false
+    }
   }
 
   // Invite pathologist dialog
@@ -3325,6 +3409,20 @@ $apple-duration-slow: 0.4s;
   .check-icon {
     flex-shrink: 0;
     color: rgb(var(--v-theme-primary));
+  }
+
+  .slide-unlink-btn {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  &:hover .slide-unlink-btn {
+    opacity: 0.6;
+  }
+
+  .slide-unlink-btn:hover {
+    opacity: 1 !important;
   }
 }
 

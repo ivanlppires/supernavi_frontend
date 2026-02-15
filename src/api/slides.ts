@@ -5,6 +5,15 @@ import type {
 } from './types'
 import { apiClient } from './client'
 
+export interface UnlinkedSlide {
+  slideId: string
+  filename: string
+  thumbUrl: string
+  width: number
+  height: number
+  createdAt: string
+}
+
 export interface SlideProgressResponse {
   slideId: string
   jobId?: string
@@ -63,5 +72,18 @@ export const slidesApi = {
    */
   async createAnnotation (slideId: string, data: CreateAnnotationRequest): Promise<Annotation> {
     return apiClient.post<Annotation>(`/slides/${slideId}/annotations`, data)
+  },
+
+  async listUnlinked (): Promise<UnlinkedSlide[]> {
+    const res = await apiClient.get<{ slides: UnlinkedSlide[] }>('/v1/slides/unlinked')
+    return res.slides
+  },
+
+  async linkToCase (slideId: string, caseId: string): Promise<void> {
+    await apiClient.post(`/v1/slides/${slideId}/link`, { caseId })
+  },
+
+  async unlinkFromCase (slideId: string): Promise<void> {
+    await apiClient.post(`/v1/slides/${slideId}/unlink`)
   },
 }
