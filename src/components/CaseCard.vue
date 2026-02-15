@@ -437,6 +437,9 @@
     isImageLoading.value = false
   }
 
+  const retryAttempts = ref<Map<number, number>>(new Map())
+  const MAX_RETRIES = 3
+
   function handleThumbnailError (index: number) {
     isImageLoading.value = false
     thumbnailErrors.value.add(index)
@@ -446,11 +449,16 @@
     }
     emit('thumbnail-error')
 
-    // Clear error after 3 seconds to allow retry (thumbnail may still be generating)
-    setTimeout(() => {
-      thumbnailErrors.value.delete(index)
-      retryCounter.value++ // Bust browser cache on retry
-    }, 3000)
+    const attempts = (retryAttempts.value.get(index) || 0) + 1
+    retryAttempts.value.set(index, attempts)
+
+    // Only retry up to MAX_RETRIES times
+    if (attempts <= MAX_RETRIES) {
+      setTimeout(() => {
+        thumbnailErrors.value.delete(index)
+        retryCounter.value++
+      }, 3000 * attempts) // Increasing backoff
+    }
   }
 
   function handleMenuAction (location: 'inbox' | 'archived' | 'trash') {

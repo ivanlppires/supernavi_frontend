@@ -2528,13 +2528,12 @@
     const urls: string[] = []
 
     for (const slide of slides) {
-      // Use thumbnailUrl if available, otherwise construct from slide ID
-      // Use relative paths to go through Vite proxy (avoids CORS issues in dev)
+      // Prefix with cloud base URL since thumbnails are served by the cloud API,
+      // not the frontend nginx (which would return the SPA HTML instead)
       if (slide.thumbnailUrl) {
-        urls.push(slide.thumbnailUrl)
+        urls.push(`${CLOUD_BASE_URL}${slide.thumbnailUrl}`)
       } else if (slide.id) {
-        // Construct thumbnail URL from slide ID
-        urls.push(`/preview/${slide.id}/thumb.jpg`)
+        urls.push(`${CLOUD_BASE_URL}/preview/${slide.id}/thumb.jpg`)
       }
     }
 
@@ -2542,7 +2541,7 @@
     if (urls.length === 0) {
       const caseItem = casesStore.cases.value.find(c => c.id === caseId)
       if (caseItem?.thumbnailUrl) {
-        urls.push(caseItem.thumbnailUrl)
+        urls.push(`${CLOUD_BASE_URL}${caseItem.thumbnailUrl}`)
       }
     }
 

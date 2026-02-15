@@ -2059,8 +2059,8 @@
 
     const idx = selectedAnnotation.value.messages.findIndex(m => m.id === message.id)
     if (idx !== -1) {
-      selectedAnnotation.value.messages[idx].content = editingMessageContent.value.trim()
-      selectedAnnotation.value.messages[idx].editedAt = new Date()
+      selectedAnnotation.value.messages[idx]!.content = editingMessageContent.value.trim()
+      selectedAnnotation.value.messages[idx]!.editedAt = new Date()
     }
 
     cancelMessageEdit()
@@ -2217,7 +2217,7 @@
       timestamp: new Date(apiMsg.createdAt),
       type: apiMsg.type.replace('_', '-') as Message['type'],
       aiConfidence: apiMsg.aiConfidence ?? undefined,
-      aiFindings: apiMsg.aiFindings ?? undefined,
+      aiFindings: (apiMsg.aiFindings as Message['aiFindings']) ?? undefined,
     }
   }
 
@@ -2302,7 +2302,7 @@
       setTimeout(() => {
         if (selectedAnnotation.value) {
           // Generate contextual AI response based on user message
-          const userMsg = message.content.toLowerCase()
+          const userMsg = content.toLowerCase()
           let aiContent = ''
           let aiFindings: Array<{ label: string, value: string, severity?: 'high' | 'medium' | 'low' }> = []
           let aiConfidence = 88
@@ -2331,7 +2331,7 @@
             ]
             aiConfidence = 92
           } else {
-            aiContent = `Obrigado pela sua observação sobre "${message.content.slice(0, 50)}${message.content.length > 50 ? '...' : ''}". Analisei a região marcada e identifiquei características relevantes que podem auxiliar no diagnóstico diferencial.`
+            aiContent = `Obrigado pela sua observação sobre "${content.slice(0, 50)}${content.length > 50 ? '...' : ''}". Analisei a região marcada e identifiquei características relevantes que podem auxiliar no diagnóstico diferencial.`
             aiFindings = [
               { label: 'Análise', value: 'Observação registrada e correlacionada com achados anteriores' },
               { label: 'Sugestão', value: 'Considere marcar outras áreas de interesse para comparação' },

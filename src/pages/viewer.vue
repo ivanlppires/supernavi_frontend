@@ -762,7 +762,7 @@
     try {
       const parts = token.split('.')
       if (parts.length !== 3) return null
-      return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+      return JSON.parse(atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')))
     } catch {
       return null
     }
