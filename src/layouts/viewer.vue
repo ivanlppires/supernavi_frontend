@@ -338,10 +338,11 @@
                       <v-list-item-title>Ir para região</v-list-item-title>
                     </v-list-item>
                     <v-list-item
+                      disabled
                       prepend-icon="mdi-account-plus-outline"
-                      @click="openInviteDialog"
                     >
                       <v-list-item-title>Convidar patologista</v-list-item-title>
+                      <v-list-item-subtitle class="text-caption">Em breve</v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item
                       :prepend-icon="selectedAnnotation.status === 'resolved' ? 'mdi-arrow-u-left-top' : 'mdi-check-circle-outline'"
