@@ -2073,17 +2073,19 @@
   const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || 'https://cloud.supernavi.app'
   const API_BASE_URL = `${CLOUD_BASE_URL}/api`
 
-  // Generate thumbnail URL for a case (uses Cloud API's preview endpoint)
-  // Uses relative URLs to go through Vite proxy in development
+  // Generate thumbnail URL for a case
+  // When edge is connected, use edge thumbnails (full quality, always available)
+  // Otherwise fall back to cloud preview thumbnails
   function getThumbnailUrls (caseId: string): string[] {
-    // Get all thumbnail URLs from the case's slides
     const slides = caseSlides.value.get(caseId) || []
     const urls: string[] = []
+    const agentId = edgeAgentInfo.value?.agentId
 
     for (const slide of slides) {
-      // Prefix with cloud base URL since thumbnails are served by the cloud API,
-      // not the frontend nginx (which would return the SPA HTML instead)
-      if (slide.thumbnailUrl) {
+      if (edgeConnected.value && agentId) {
+        // Edge thumbnail: full quality, no S3 dependency
+        urls.push(`${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slide.id}/thumb`)
+      } else if (slide.thumbnailUrl) {
         urls.push(`${CLOUD_BASE_URL}${slide.thumbnailUrl}`)
       } else if (slide.id) {
         urls.push(`${CLOUD_BASE_URL}/preview/${slide.id}/thumb.jpg`)
