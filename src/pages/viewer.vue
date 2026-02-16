@@ -788,6 +788,7 @@
           role: 'pathologist',
           avatar: payload.userAvatar || undefined,
           createdAt: new Date(),
+          edgeId: payload.edgeId || null,
         }
         authStore.isAuthenticated = true
       }
