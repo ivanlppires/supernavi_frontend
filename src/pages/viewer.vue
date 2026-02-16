@@ -225,14 +225,7 @@
   const isReadOnly = ref(false)
   provide('viewerReadOnly', isReadOnly)
 
-  // Provide edge-first state to layout for TileSourceBadge
-  provide('edgeFirstTileSource', {
-    origin: edgeFirstTileSource.origin,
-    edgeAgentId: edgeFirstTileSource.edgeAgentId,
-    edgeAvailable: edgeFirstTileSource.edgeAvailable,
-    fallbackReason: edgeFirstTileSource.fallbackReason,
-    isLoading: edgeFirstTileSource.isLoading,
-  })
+  // Edge-first state is a singleton composable — layout accesses it directly
 
   // Refs
   const dziViewerRef = ref<InstanceType<typeof DziViewer> | null>(null)

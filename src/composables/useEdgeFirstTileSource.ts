@@ -215,16 +215,27 @@ function createCloudTileSource (slideId: string, manifest: TileManifest): object
  * viewer.open(tileSource.value)
  * ```
  */
+// Singleton state — shared across all callers (page + layout)
+const _isLoading = ref(false)
+const _error = ref<Error | null>(null)
+const _origin = ref<TileSourceOrigin>('unknown')
+const _fallbackReason = ref<string | null>(null)
+const _manifest = ref<TileManifest | null>(null)
+const _tileSource = ref<object | null>(null)
+const _thumbnailUrl = ref<string | null>(null)
+const _edgeAvailable = ref(false)
+const _currentSlideId = ref<string | null>(null)
+
 export function useEdgeFirstTileSource () {
-  const isLoading = ref(false)
-  const error = ref<Error | null>(null)
-  const origin = ref<TileSourceOrigin>('unknown')
-  const fallbackReason = ref<string | null>(null)
-  const manifest = ref<TileManifest | null>(null)
-  const tileSource = ref<object | null>(null)
-  const thumbnailUrl = ref<string | null>(null)
-  const edgeAvailable = ref(false)
-  const currentSlideId = ref<string | null>(null)
+  const isLoading = _isLoading
+  const error = _error
+  const origin = _origin
+  const fallbackReason = _fallbackReason
+  const manifest = _manifest
+  const tileSource = _tileSource
+  const thumbnailUrl = _thumbnailUrl
+  const edgeAvailable = _edgeAvailable
+  const currentSlideId = _currentSlideId
 
   /**
    * Load a slide with edge-first strategy

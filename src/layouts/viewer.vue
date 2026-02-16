@@ -1233,13 +1233,13 @@
           </div>
 
           <!-- Tile Source Badge (Local/Cloud) -->
-          <div v-if="edgeFirstState && edgeFirstState.origin.value !== 'unknown'" class="status-separator" />
+          <div v-if="edgeFirst.origin.value !== 'unknown'" class="status-separator" />
           <TileSourceBadge
-            v-if="edgeFirstState && edgeFirstState.origin.value !== 'unknown'"
-            :edge-agent-id="edgeFirstState.edgeAgentId.value"
-            :edge-available="edgeFirstState.edgeAvailable.value"
-            :fallback-reason="edgeFirstState.fallbackReason.value"
-            :origin="edgeFirstState.origin.value"
+            v-if="edgeFirst.origin.value !== 'unknown'"
+            :edge-agent-id="edgeFirst.edgeAgentId.value"
+            :edge-available="edgeFirst.edgeAvailable.value"
+            :fallback-reason="edgeFirst.fallbackReason.value"
+            :origin="edgeFirst.origin.value"
           />
 
           <!-- Loading Indicator -->
@@ -1619,7 +1619,7 @@
 <script setup lang="ts">
   import type { MeasurementResult, ROI } from '@/composables/useViewer'
   import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
-  import type { TileSourceOrigin } from '@/composables/useEdgeFirstTileSource'
+  import { useEdgeFirstTileSource } from '@/composables/useEdgeFirstTileSource'
   import TileSourceBadge from '@/components/TileSourceBadge.vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useDisplay, useTheme } from 'vuetify'
@@ -1639,15 +1639,8 @@
   // Viewer Controls (global state)
   const viewerControls = useViewer()
 
-  // Edge-first tile source state (injected from viewer page)
-  interface EdgeFirstState {
-    origin: { value: TileSourceOrigin }
-    edgeAgentId: { value: string }
-    edgeAvailable: { value: boolean }
-    fallbackReason: { value: string | null }
-    isLoading: { value: boolean }
-  }
-  const edgeFirstState = inject<EdgeFirstState | null>('edgeFirstTileSource', null)
+  // Edge-first tile source state (singleton — shared with viewer page)
+  const edgeFirst = useEdgeFirstTileSource()
 
   // Read-only mode (magic links: no annotations/drawing)
   const isReadOnly = inject<{ value: boolean }>('viewerReadOnly', ref(false))
