@@ -29,7 +29,11 @@ router.beforeEach(async (to, from, next) => {
 
   if (requiresAuth) {
     // Allow magic link access to viewer (skip auth when ?t= token present)
+    // Still try to restore session so edgeId and user data are available
     if (to.path === '/viewer' && to.query.t) {
+      if (!authStore.isAuthenticated) {
+        await authStore.initFromStorage()
+      }
       return next()
     }
 
