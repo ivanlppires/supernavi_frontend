@@ -259,7 +259,9 @@
   }
 
   // Check if slide is still being processed
+  // If edge loaded tiles, don't show processing screen even if cloud says "processing"
   const isSlideProcessing = computed(() => {
+    if (edgeFirstTileSource.tileSource.value) return false
     const status = currentSlide.value?.processingStatus
     return status === 'processing' || status === 'uploading' || status === 'pending'
   })
@@ -369,17 +371,16 @@
   // Computed: tile source from current slide
   // Priority: edge-first > signed S3 > direct URL
   const tileSource = computed(() => {
-    // ONLY load slides that are fully ready
-    // Don't allow 'uploading' status - tiles are incomplete and cause 404 loops
-    const status = currentSlide.value?.processingStatus
-    if (!currentSlide.value || status !== 'ready') {
-      return undefined
-    }
+    if (!currentSlide.value) return undefined
 
-    // Priority 1: Edge-first tile source (local edge or cloud preview)
+    // Priority 1: Edge-first tile source — available even when cloud says "processing"
     if (edgeFirstTileSource.tileSource.value) {
       return edgeFirstTileSource.tileSource.value
     }
+
+    // For cloud-only sources, require "ready" status to avoid 404 loops
+    const status = currentSlide.value.processingStatus
+    if (status !== 'ready') return undefined
 
     // Priority 2: Signed S3 tile source (cloud API)
     if (signedTileSource.tileSource.value) {
@@ -611,15 +612,10 @@
   // Load tile source for a slide using edge-first strategy
   // Priority: local edge > cloud preview > signed S3
   async function loadSlideWithEdgeFirst (slide: Slide) {
-    // Only load when slide is fully ready - uploading causes 404 loops
-    if (slide.processingStatus !== 'ready') {
-      console.log('[ViewerPage] Slide not ready, skipping tile source loading')
-      return
-    }
-
     const slideId = slide.id
 
-    // Try edge-first if configured
+    // Try edge-first if configured — edge can serve tiles even if cloud says "processing"
+    // because the edge has local tiles ready before the remote preview upload finishes
     if (edgeFirstTileSource.isEdgeConfigured.value) {
       console.log('[ViewerPage] Trying edge-first for slide:', slideId)
       try {
@@ -631,7 +627,11 @@
       }
     }
 
-    // Fallback to signed S3 URLs
+    // Fallback to signed S3 URLs (only when cloud confirms ready — incomplete uploads cause 404 loops)
+    if (slide.processingStatus !== 'ready') {
+      console.log('[ViewerPage] Slide not ready on cloud and edge unavailable, skipping S3 fallback')
+      return
+    }
     if (!slide.dziPath) {
       console.log('[ViewerPage] No dziPath available, cannot load from S3')
       return
@@ -821,6 +821,13 @@
 
       if (slide.processingStatus === 'ready') {
         await loadSlideWithEdgeFirst(slide)
+      } else if (edgeFirstTileSource.isEdgeConfigured.value) {
+        // Edge can serve tiles locally even if cloud says "processing" (preview upload in progress)
+        await loadSlideWithEdgeFirst(slide)
+        // If edge didn't load, fall back to processing screen
+        if (!edgeFirstTileSource.tileSource.value) {
+          startProgressPolling()
+        }
       } else if (slide.processingStatus === 'processing' || slide.processingStatus === 'pending') {
         startProgressPolling()
       }
