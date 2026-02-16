@@ -76,6 +76,12 @@
                 title="Configurações"
                 @click="goToSettings"
               />
+              <v-list-item
+                v-if="authStore.user?.role === 'admin'"
+                prepend-icon="mdi-shield-crown-outline"
+                title="Administração"
+                @click="router.push('/admin/edges')"
+              />
             </v-list>
 
             <v-divider />
