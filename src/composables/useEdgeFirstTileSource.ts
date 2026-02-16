@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
  */
 const ENV_EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
 const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 3000
+const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || '' // e.g. https://cloud.supernavi.app
 
 /**
  * Get the edge agent ID: prefers user profile, falls back to env var
@@ -73,7 +74,7 @@ async function checkEdgeHealth (agentId: string, timeoutMs: number): Promise<boo
     return false
   }
 
-  const healthUrl = `/edge/${agentId}/v1/health`
+  const healthUrl = `${CLOUD_BASE_URL}/edge/${agentId}/v1/health`
   console.log(`[EdgeFirst] Checking edge health: ${healthUrl}`)
 
   try {
@@ -109,7 +110,7 @@ async function checkEdgeHealth (agentId: string, timeoutMs: number): Promise<boo
  * Fetch manifest from local edge
  */
 async function fetchLocalManifest (agentId: string, slideId: string): Promise<TileManifest> {
-  const url = `/edge/${agentId}/v1/slides/${slideId}/manifest`
+  const url = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/manifest`
   console.log(`[EdgeFirst] Fetching local manifest: ${url}`)
 
   const response = await fetch(url)
@@ -124,7 +125,7 @@ async function fetchLocalManifest (agentId: string, slideId: string): Promise<Ti
  * Fetch manifest from cloud preview
  */
 async function fetchCloudManifest (slideId: string): Promise<TileManifest> {
-  const url = `/preview/${slideId}/manifest.json`
+  const url = `${CLOUD_BASE_URL}/preview/${slideId}/manifest.json`
   console.log(`[EdgeFirst] Fetching cloud manifest: ${url}`)
 
   const response = await fetch(url)
@@ -151,7 +152,7 @@ function createLocalTileSource (agentId: string, slideId: string, manifest: Tile
     maxLevel,
     // Custom tile URL function for local edge
     getTileUrl (level: number, x: number, y: number): string {
-      return `/edge/${agentId}/v1/slides/${slideId}/tiles/${level}/${x}/${y}.${format}`
+      return `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/tiles/${level}/${x}/${y}.${format}`
     },
   }
 }
@@ -187,7 +188,7 @@ function createCloudTileSource (slideId: string, manifest: TileManifest): object
     // Custom tile URL function for cloud preview
     // Passes DZI absolute level - the cloud tile route handles mapping to rebased level
     getTileUrl (level: number, x: number, y: number): string {
-      return `/preview/${slideId}/tiles/${level}/${x}_${y}.${format}`
+      return `${CLOUD_BASE_URL}/preview/${slideId}/tiles/${level}/${x}_${y}.${format}`
     },
   }
 }
@@ -253,7 +254,7 @@ export function useEdgeFirstTileSource () {
           manifest.value = localManifest
 
           tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
-          thumbnailUrl.value = `/edge/${agentId}/v1/slides/${slideId}/thumb`
+          thumbnailUrl.value = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/thumb`
           origin.value = 'local'
 
           console.log('[EdgeFirst] Loaded from LOCAL edge (full resolution available)')
@@ -274,7 +275,7 @@ export function useEdgeFirstTileSource () {
       manifest.value = cloudManifest
 
       tileSource.value = createCloudTileSource(slideId, cloudManifest)
-      thumbnailUrl.value = `/preview/${slideId}/thumb.jpg`
+      thumbnailUrl.value = `${CLOUD_BASE_URL}/preview/${slideId}/thumb.jpg`
       origin.value = 'cloud'
 
       // Warn if cloud has limited resolution
@@ -319,7 +320,7 @@ export function useEdgeFirstTileSource () {
         manifest.value = localManifest
 
         tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
-        thumbnailUrl.value = `/edge/${agentId}/v1/slides/${slideId}/thumb`
+        thumbnailUrl.value = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/thumb`
         origin.value = 'local'
         fallbackReason.value = null
       } else {
@@ -327,7 +328,7 @@ export function useEdgeFirstTileSource () {
         manifest.value = cloudManifest
 
         tileSource.value = createCloudTileSource(slideId, cloudManifest)
-        thumbnailUrl.value = `/preview/${slideId}/thumb.jpg`
+        thumbnailUrl.value = `${CLOUD_BASE_URL}/preview/${slideId}/thumb.jpg`
         origin.value = 'cloud'
         fallbackReason.value = 'Manually selected cloud'
       }
