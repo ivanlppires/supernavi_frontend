@@ -1389,11 +1389,22 @@
       return { status: 'none', pendingCount: 0, processingCount: 0, uploadingCount: 0, readyCount: 0, failedCount: 0, totalCount: 0, progress: 0, stageLabel: '' }
     }
 
-    const pendingCount = slides.filter(s => s.processingStatus === 'pending').length
-    const processingCount = slides.filter(s => s.processingStatus === 'processing').length
-    const uploadingCount = slides.filter(s => s.processingStatus === 'uploading').length
-    const readyCount = slides.filter(s => s.processingStatus === 'ready').length
-    const failedCount = slides.filter(s => s.processingStatus === 'failed').length
+    // When edge is connected and no active edge processing for this case,
+    // treat cloud 'processing' as 'ready' — the cloud only says 'processing'
+    // because the S3 preview hasn't been uploaded yet, but the edge already
+    // serves tiles locally via on-demand generation.
+    const effectiveStatus = (s: { processingStatus: ProcessingStatus }) => {
+      if (edgeConnected.value && s.processingStatus === 'processing') {
+        return 'ready'
+      }
+      return s.processingStatus
+    }
+
+    const pendingCount = slides.filter(s => effectiveStatus(s) === 'pending').length
+    const processingCount = slides.filter(s => effectiveStatus(s) === 'processing').length
+    const uploadingCount = slides.filter(s => effectiveStatus(s) === 'uploading').length
+    const readyCount = slides.filter(s => effectiveStatus(s) === 'ready').length
+    const failedCount = slides.filter(s => effectiveStatus(s) === 'failed').length
 
     let status: ProcessingStatus | 'none' = 'none'
     if (failedCount > 0) status = 'failed'
@@ -1404,9 +1415,10 @@
     // Calculate average progress and stage label
     let progress = 0
     let stageLabel = ''
-    const processingSlides = slides.filter(s =>
-      s.processingStatus === 'processing' || s.processingStatus === 'pending' || s.processingStatus === 'uploading',
-    )
+    const processingSlides = slides.filter(s => {
+      const es = effectiveStatus(s)
+      return es === 'processing' || es === 'pending' || es === 'uploading'
+    })
     if (processingSlides.length > 0) {
       const progressSum = processingSlides.reduce((sum, s) => {
         return sum + (slideProgress.value.get(s.id) || 0)
