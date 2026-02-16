@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth'
  * Edge agent configuration from environment (fallback for dev)
  */
 const ENV_EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
-const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 500
+const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 3000
 
 /**
  * Get the edge agent ID: prefers user profile, falls back to env var
@@ -47,22 +47,6 @@ export interface TileManifest {
   storage?: {
     prefix?: string
   }
-}
-
-/**
- * Extract Edge slide ID from cloud manifest storage prefix
- * Prefix format: "previews/{edgeSlideId}/"
- */
-function extractEdgeSlideId (manifest: TileManifest): string | null {
-  const prefix = manifest.storage?.prefix
-  if (!prefix) return null
-
-  // Extract the ID from "previews/{edgeSlideId}/"
-  const match = prefix.match(/^previews\/([a-f0-9]{64})\/?/)
-  if (match && match[1]) {
-    return match[1]
-  }
-  return null
 }
 
 /**
@@ -257,31 +241,19 @@ export function useEdgeFirstTileSource () {
     currentSlideId.value = slideId
 
     try {
-      // Step 1: Fetch cloud manifest first to get edge slide ID mapping
-      let cloudManifest: TileManifest | null = null
-      let edgeSlideId: string | null = null
-
-      try {
-        cloudManifest = await fetchCloudManifest(slideId)
-        edgeSlideId = extractEdgeSlideId(cloudManifest)
-        console.log(`[EdgeFirst] Cloud manifest loaded, edgeSlideId: ${edgeSlideId}`)
-      } catch (cloudError) {
-        console.warn('[EdgeFirst] Failed to fetch cloud manifest:', (cloudError as Error).message)
-      }
-
-      // Step 2: Check if edge agent is available
+      // Step 1: Check if edge agent is available (check first — edge can serve without cloud manifest)
       const agentId = getEdgeAgentId()
       const edgeOk = await checkEdgeHealth(agentId, EDGE_HEALTH_TIMEOUT_MS)
       edgeAvailable.value = edgeOk
 
-      if (edgeOk && edgeSlideId) {
-        // Step 3a: Try to load from local edge using edge slide ID
+      if (edgeOk) {
+        // Step 2a: Try to load from local edge using slideId directly (same SHA256 hash)
         try {
-          const localManifest = await fetchLocalManifest(agentId, edgeSlideId)
+          const localManifest = await fetchLocalManifest(agentId, slideId)
           manifest.value = localManifest
 
-          tileSource.value = createLocalTileSource(agentId, edgeSlideId, localManifest)
-          thumbnailUrl.value = `/edge/${agentId}/v1/slides/${edgeSlideId}/thumb`
+          tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
+          thumbnailUrl.value = `/edge/${agentId}/v1/slides/${slideId}/thumb`
           origin.value = 'local'
 
           console.log('[EdgeFirst] Loaded from LOCAL edge (full resolution available)')
@@ -291,18 +263,14 @@ export function useEdgeFirstTileSource () {
           fallbackReason.value = `Local load failed: ${(localError as Error).message}`
           // Fall through to cloud
         }
-      } else if (!edgeOk) {
+      } else {
         fallbackReason.value = 'Edge agent not available'
-      } else if (!edgeSlideId) {
-        fallbackReason.value = 'Could not determine edge slide ID'
       }
 
-      // Step 3b: Fall back to cloud preview
+      // Step 2b: Fall back to cloud preview
       console.log('[EdgeFirst] Falling back to cloud preview...')
 
-      if (!cloudManifest) {
-        cloudManifest = await fetchCloudManifest(slideId)
-      }
+      const cloudManifest = await fetchCloudManifest(slideId)
       manifest.value = cloudManifest
 
       tileSource.value = createCloudTileSource(slideId, cloudManifest)
@@ -347,19 +315,11 @@ export function useEdgeFirstTileSource () {
           throw new Error('No edge agent configured')
         }
 
-        // Get edge slide ID from cloud manifest
-        const cloudManifest = await fetchCloudManifest(slideId)
-        const edgeSlideId = extractEdgeSlideId(cloudManifest)
-
-        if (!edgeSlideId) {
-          throw new Error('Could not determine edge slide ID')
-        }
-
-        const localManifest = await fetchLocalManifest(agentId, edgeSlideId)
+        const localManifest = await fetchLocalManifest(agentId, slideId)
         manifest.value = localManifest
 
-        tileSource.value = createLocalTileSource(agentId, edgeSlideId, localManifest)
-        thumbnailUrl.value = `/edge/${agentId}/v1/slides/${edgeSlideId}/thumb`
+        tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
+        thumbnailUrl.value = `/edge/${agentId}/v1/slides/${slideId}/thumb`
         origin.value = 'local'
         fallbackReason.value = null
       } else {
