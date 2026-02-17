@@ -1198,6 +1198,16 @@
       <!-- Floating Status Card (Google Maps style) -->
       <div v-show="!focusMode" class="status-card" :class="{ 'status-card-mobile': mobile }">
         <div class="status-content">
+          <!-- Tile Source Badge (Local/Cloud) - first for visibility -->
+          <TileSourceBadge
+            v-if="edgeFirst.origin.value !== 'unknown'"
+            :edge-agent-id="edgeFirst.edgeAgentId.value"
+            :edge-available="edgeFirst.edgeAvailable.value"
+            :fallback-reason="edgeFirst.fallbackReason.value"
+            :origin="edgeFirst.origin.value"
+          />
+          <div v-if="edgeFirst.origin.value !== 'unknown'" class="status-separator" />
+
           <!-- Magnification Info -->
           <div class="status-item" :class="{ 'status-digital-zoom': viewerControls.state.value.isDigitalZoom }">
             <v-icon class="status-icon" size="16">mdi-magnify</v-icon>
@@ -1231,16 +1241,6 @@
             <strong class="status-value">{{ viewerControls.state.value.tilesLoaded }}</strong>
             <span class="status-label">tiles</span>
           </div>
-
-          <!-- Tile Source Badge (Local/Cloud) -->
-          <div v-if="edgeFirst.origin.value !== 'unknown'" class="status-separator" />
-          <TileSourceBadge
-            v-if="edgeFirst.origin.value !== 'unknown'"
-            :edge-agent-id="edgeFirst.edgeAgentId.value"
-            :edge-available="edgeFirst.edgeAvailable.value"
-            :fallback-reason="edgeFirst.fallbackReason.value"
-            :origin="edgeFirst.origin.value"
-          />
 
           <!-- Loading Indicator -->
           <div v-if="!viewerControls.isViewerReady.value" class="status-separator" />
