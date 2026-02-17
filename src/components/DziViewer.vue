@@ -420,7 +420,7 @@
       silenceMultiImageWarnings: true,
       // Limit tile retry attempts to avoid infinite 404 loops
       imageLoaderLimit: 10,
-      timeout: 30_000,
+      timeout: 60_000,
     } as OpenSeadragon.Options
   })
 
