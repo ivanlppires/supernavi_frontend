@@ -39,7 +39,10 @@
 
   const chipColor = computed(() => {
     switch (props.origin) {
-      case 'local': {
+      case 'direct': {
+        return 'success'
+      }
+      case 'tunnel': {
         return 'success'
       }
       case 'cloud': {
@@ -53,8 +56,11 @@
 
   const chipIcon = computed(() => {
     switch (props.origin) {
-      case 'local': {
+      case 'direct': {
         return 'mdi-lan'
+      }
+      case 'tunnel': {
+        return 'mdi-cloud-sync'
       }
       case 'cloud': {
         return 'mdi-cloud'
@@ -67,8 +73,11 @@
 
   const chipLabel = computed(() => {
     switch (props.origin) {
-      case 'local': {
-        return 'LOCAL'
+      case 'direct': {
+        return 'DIRETO'
+      }
+      case 'tunnel': {
+        return 'TUNNEL'
       }
       case 'cloud': {
         return 'CLOUD'
@@ -81,8 +90,11 @@
 
   const tooltipTitle = computed(() => {
     switch (props.origin) {
-      case 'local': {
-        return `Carregando do agente local (${props.edgeAgentId || 'edge'})`
+      case 'direct': {
+        return `Carregando direto do agente local (LAN)`
+      }
+      case 'tunnel': {
+        return `Carregando via tunnel (${props.edgeAgentId || 'edge'})`
       }
       case 'cloud': {
         return 'Carregando do servidor cloud (preview)'
@@ -97,8 +109,11 @@
     if (props.origin === 'cloud' && props.fallbackReason) {
       return `Motivo: ${props.fallbackReason}`
     }
-    if (props.origin === 'local') {
-      return 'Tiles em resolução total disponíveis'
+    if (props.origin === 'direct') {
+      return 'Tiles em resolução total via rede local'
+    }
+    if (props.origin === 'tunnel') {
+      return 'Tiles em resolução total via tunnel'
     }
     return null
   })

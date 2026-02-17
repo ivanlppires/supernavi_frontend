@@ -55,6 +55,7 @@
 
 <script setup lang="ts">
   import type { DrawingMode, MeasurementResult, ROI, ROICoordinates } from '@/composables/useViewer'
+  import { useEdgeFirstTileSource } from '@/composables/useEdgeFirstTileSource'
   import OpenSeadragon from 'openseadragon'
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -463,6 +464,11 @@
       // Track failed tiles to prevent infinite retries
       const failedTiles = new Set<string>()
 
+      // Tile error tracking for edge-direct re-discovery
+      const { onTileError } = useEdgeFirstTileSource()
+      let tileErrorCount = 0
+      let tileErrorResetTimer: ReturnType<typeof setTimeout> | null = null
+
       // Handle tile load failures - prevent infinite retries on 404s
       viewer.value.addHandler('tile-load-failed', (event: any) => {
         // Create a unique key for this tile
@@ -476,6 +482,20 @@
             tile.loading = false
           }
         }
+
+        // Track rapid failures for edge-direct re-discovery
+        tileErrorCount++
+        if (!tileErrorResetTimer) {
+          tileErrorResetTimer = setTimeout(() => {
+            tileErrorCount = 0
+            tileErrorResetTimer = null
+          }, 10000)
+        }
+        if (tileErrorCount >= 3) {
+          onTileError()
+          tileErrorCount = 0
+        }
+
         // Still count towards tile loading progress
         checkTilesReady()
       })

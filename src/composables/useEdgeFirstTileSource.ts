@@ -1,29 +1,19 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 /**
- * Edge agent configuration from environment (fallback for dev)
+ * Configuration
  */
 const ENV_EDGE_AGENT_ID = import.meta.env.VITE_EDGE_AGENT_ID || ''
-const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 3000
-const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || '' // e.g. https://cloud.supernavi.app
+const EDGE_DIRECT_URL = import.meta.env.VITE_EDGE_DIRECT_URL || ''
+const WELL_KNOWN_EDGE_URL = 'https://supernavi-edge.local:3443'
+const EDGE_HEALTH_TIMEOUT_MS = Number(import.meta.env.VITE_EDGE_HEALTH_TIMEOUT_MS) || 800
+const CLOUD_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 /**
- * Get the edge agent ID: prefers user profile, falls back to env var
+ * Tile source origin
  */
-function getEdgeAgentId (): string {
-  try {
-    const authStore = useAuthStore()
-    return authStore.user?.edgeId || ENV_EDGE_AGENT_ID
-  } catch {
-    return ENV_EDGE_AGENT_ID
-  }
-}
-
-/**
- * Tile source origin (where tiles are being loaded from)
- */
-export type TileSourceOrigin = 'local' | 'cloud' | 'unknown'
+export type TileSourceOrigin = 'direct' | 'tunnel' | 'cloud' | 'unknown'
 
 /**
  * Manifest format from edge/cloud
@@ -38,108 +28,131 @@ export interface TileManifest {
   maxLevel?: number
   tileUrlTemplate?: string
   onDemand?: boolean
-  // Magnification metadata
-  appMag?: number | null     // Native scan magnification (e.g., 20, 40)
-  mpp?: number | null        // Microns per pixel
-  // Cloud-specific fields
+  appMag?: number | null
+  mpp?: number | null
   originalLevelMax?: number
-  maxPreviewLevel?: number   // Rebased max level (how many levels of tiles exist in S3)
-  levelOffset?: number       // Offset between DZI absolute levels and rebased levels
-  storage?: {
-    prefix?: string
+  maxPreviewLevel?: number
+  levelOffset?: number
+  storage?: { prefix?: string }
+}
+
+/**
+ * Get edge agent ID from auth store or env
+ */
+function getEdgeAgentId (): string {
+  try {
+    const authStore = useAuthStore()
+    return authStore.user?.edgeId || ENV_EDGE_AGENT_ID
+  } catch {
+    return ENV_EDGE_AGENT_ID
   }
 }
 
 /**
- * Edge-first tile source state
+ * Session-sticky edge direct URL cache.
+ * undefined = not yet checked, null = checked but not found, string = working URL
  */
-export interface EdgeFirstTileSourceState {
-  isLoading: boolean
-  error: Error | null
-  origin: TileSourceOrigin
-  fallbackReason: string | null
-  manifest: TileManifest | null
-  tileSource: object | null
-  thumbnailUrl: string | null
-  edgeAgentId: string
-  edgeAvailable: boolean
-}
+let _cachedDirectUrl: string | null | undefined = undefined
 
 /**
- * Check if the edge agent is available via the cloud tunnel
+ * Check health of a URL with fast timeout
  */
-async function checkEdgeHealth (agentId: string, timeoutMs: number): Promise<boolean> {
-  if (!agentId) {
-    console.log('[EdgeFirst] No agentId configured, skipping edge check')
-    return false
-  }
-
-  const healthUrl = `${CLOUD_BASE_URL}/edge/${agentId}/v1/health`
-  console.log(`[EdgeFirst] Checking edge health: ${healthUrl}`)
-
+async function checkHealth (url: string, timeoutMs: number): Promise<boolean> {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-    const response = await fetch(healthUrl, {
+    const response = await fetch(`${url}/v1/health`, {
       method: 'GET',
       signal: controller.signal,
     })
-
     clearTimeout(timeoutId)
-
     if (response.ok) {
       const data = await response.json()
-      console.log('[EdgeFirst] Edge agent is available:', data)
+      console.log(`[EdgeFirst] Health OK: ${url}`, data)
       return true
     }
-
-    console.log(`[EdgeFirst] Edge health check failed: ${response.status}`)
+    console.log(`[EdgeFirst] Health failed: ${url} → ${response.status}`)
     return false
   } catch (error) {
-    if ((error as Error).name === 'AbortError') {
-      console.log(`[EdgeFirst] Edge health check timed out (${timeoutMs}ms)`)
+    const name = (error as Error).name
+    if (name === 'AbortError') {
+      console.log(`[EdgeFirst] Health timeout: ${url} (${timeoutMs}ms)`)
     } else {
-      console.log('[EdgeFirst] Edge health check error:', (error as Error).message)
+      console.log(`[EdgeFirst] Health error: ${url} → ${(error as Error).message}`)
     }
     return false
   }
 }
 
 /**
- * Fetch manifest from local edge
+ * Discover direct edge URL. Tries VITE_EDGE_DIRECT_URL, then well-known.
+ * Result is cached for the session (sticky).
  */
-async function fetchLocalManifest (agentId: string, slideId: string): Promise<TileManifest> {
-  const url = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/manifest`
-  console.log(`[EdgeFirst] Fetching local manifest: ${url}`)
-
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch local manifest: ${response.status}`)
+async function discoverDirectEdge (): Promise<string | null> {
+  if (_cachedDirectUrl !== undefined) {
+    return _cachedDirectUrl
   }
 
+  const candidates = [EDGE_DIRECT_URL, WELL_KNOWN_EDGE_URL].filter(Boolean)
+
+  for (const url of candidates) {
+    console.log(`[EdgeFirst] Trying direct edge: ${url}`)
+    const ok = await checkHealth(url, EDGE_HEALTH_TIMEOUT_MS)
+    if (ok) {
+      _cachedDirectUrl = url
+      console.log(`[EdgeFirst] Direct edge discovered: ${url}`)
+      return url
+    }
+  }
+
+  _cachedDirectUrl = null
+  console.log('[EdgeFirst] No direct edge found, will use tunnel/cloud')
+  return null
+}
+
+/**
+ * Invalidate sticky cache (called on repeated tile errors)
+ */
+function invalidateDirectEdgeCache (): void {
+  console.log('[EdgeFirst] Invalidating direct edge cache')
+  _cachedDirectUrl = undefined
+}
+
+/**
+ * Check tunnel health via cloud
+ */
+async function checkTunnelHealth (agentId: string): Promise<boolean> {
+  if (!agentId) return false
+  const url = `${CLOUD_BASE_URL}/edge/${agentId}`
+  return checkHealth(url, 3000)
+}
+
+/**
+ * Fetch manifest from a base URL (direct edge or tunnel)
+ */
+async function fetchManifest (baseUrl: string, slideId: string): Promise<TileManifest> {
+  const url = `${baseUrl}/v1/slides/${slideId}/manifest`
+  console.log(`[EdgeFirst] Fetching manifest: ${url}`)
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Manifest failed: ${response.status}`)
   return response.json()
 }
 
 /**
- * Fetch manifest from cloud preview
+ * Fetch cloud preview manifest
  */
 async function fetchCloudManifest (slideId: string): Promise<TileManifest> {
   const url = `${CLOUD_BASE_URL}/preview/${slideId}/manifest.json`
   console.log(`[EdgeFirst] Fetching cloud manifest: ${url}`)
-
   const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch cloud manifest: ${response.status}`)
-  }
-
+  if (!response.ok) throw new Error(`Cloud manifest failed: ${response.status}`)
   return response.json()
 }
 
 /**
- * Create OpenSeadragon tile source for local edge
+ * Create tile source for direct edge or tunnel edge
  */
-function createLocalTileSource (agentId: string, slideId: string, manifest: TileManifest): object {
+function createEdgeTileSource (baseUrl: string, slideId: string, manifest: TileManifest): object {
   const maxLevel = manifest.levelMax ?? manifest.maxLevel ?? Math.ceil(Math.log2(Math.max(manifest.width, manifest.height)))
   const format = manifest.format || 'jpg'
 
@@ -150,32 +163,19 @@ function createLocalTileSource (agentId: string, slideId: string, manifest: Tile
     tileOverlap: 0,
     minLevel: 0,
     maxLevel,
-    // Custom tile URL function for local edge
     getTileUrl (level: number, x: number, y: number): string {
-      return `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/tiles/${level}/${x}/${y}.${format}`
+      return `${baseUrl}/v1/slides/${slideId}/tiles/${level}/${x}/${y}.${format}`
     },
   }
 }
 
 /**
- * Create OpenSeadragon tile source for cloud preview
- *
- * The cloud stores tiles using a rebased level system (0..maxPreviewLevel),
- * but OpenSeadragon uses DZI absolute levels (level L = 2^L pixels).
- * The cloud tile route handles the level mapping, so we just need to set
- * the correct DZI-absolute maxLevel and minLevel for OSD.
+ * Create tile source for cloud preview
  */
 function createCloudTileSource (slideId: string, manifest: TileManifest): object {
   const format = manifest.format || 'jpg'
-
-  // Calculate DZI absolute maxLevel from dimensions
   const absoluteMaxLevel = Math.ceil(Math.log2(Math.max(manifest.width, manifest.height)))
-
-  // The rebased maxLevel from the manifest (how many levels of tiles exist)
   const rebasedMaxLevel = manifest.maxPreviewLevel ?? manifest.levelMax ?? manifest.maxLevel ?? absoluteMaxLevel
-
-  // Level offset: the cloud tile route uses this to map DZI levels to rebased S3 levels
-  // minLevel prevents OSD from requesting levels below what exists
   const levelOffset = absoluteMaxLevel - rebasedMaxLevel
 
   return {
@@ -185,37 +185,13 @@ function createCloudTileSource (slideId: string, manifest: TileManifest): object
     tileOverlap: 0,
     minLevel: levelOffset,
     maxLevel: absoluteMaxLevel,
-    // Custom tile URL function for cloud preview
-    // Passes DZI absolute level - the cloud tile route handles mapping to rebased level
     getTileUrl (level: number, x: number, y: number): string {
       return `${CLOUD_BASE_URL}/preview/${slideId}/tiles/${level}/${x}_${y}.${format}`
     },
   }
 }
 
-/**
- * Composable for edge-first tile loading
- *
- * Automatically detects if the local edge agent is available via the cloud tunnel
- * and loads tiles from the edge when possible, falling back to cloud preview otherwise.
- *
- * All requests go through app.supernavi.app - no direct access to localhost or S3.
- *
- * Usage:
- * ```ts
- * const { load, tileSource, thumbnailUrl, origin, edgeAvailable } = useEdgeFirstTileSource()
- *
- * // Load a slide
- * await load('slide-123')
- *
- * // Check which source is being used
- * console.log(origin.value) // 'local' or 'cloud'
- *
- * // Use with OpenSeadragon
- * viewer.open(tileSource.value)
- * ```
- */
-// Singleton state — shared across all callers (page + layout)
+// --- Singleton state ---
 const _isLoading = ref(false)
 const _error = ref<Error | null>(null)
 const _origin = ref<TileSourceOrigin>('unknown')
@@ -238,7 +214,7 @@ export function useEdgeFirstTileSource () {
   const currentSlideId = _currentSlideId
 
   /**
-   * Load a slide with edge-first strategy
+   * Load slide: direct edge → tunnel → cloud preview
    */
   async function load (slideId: string): Promise<void> {
     if (!slideId) {
@@ -253,47 +229,59 @@ export function useEdgeFirstTileSource () {
     currentSlideId.value = slideId
 
     try {
-      // Step 1: Check if edge agent is available (check first — edge can serve without cloud manifest)
-      const agentId = getEdgeAgentId()
-      const edgeOk = await checkEdgeHealth(agentId, EDGE_HEALTH_TIMEOUT_MS)
-      edgeAvailable.value = edgeOk
-
-      if (edgeOk) {
-        // Step 2a: Try to load from local edge using slideId directly (same SHA256 hash)
+      // Step 1: Try direct edge (LAN)
+      const directUrl = await discoverDirectEdge()
+      if (directUrl) {
         try {
-          const localManifest = await fetchLocalManifest(agentId, slideId)
-          manifest.value = localManifest
-
-          tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
-          thumbnailUrl.value = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/thumb`
-          origin.value = 'local'
-
-          console.log('[EdgeFirst] Loaded from LOCAL edge (full resolution available)')
+          const edgeManifest = await fetchManifest(directUrl, slideId)
+          manifest.value = edgeManifest
+          tileSource.value = createEdgeTileSource(directUrl, slideId, edgeManifest)
+          thumbnailUrl.value = `${directUrl}/v1/slides/${slideId}/thumb`
+          origin.value = 'direct'
+          edgeAvailable.value = true
+          console.log('[EdgeFirst] Loaded from DIRECT edge (LAN)')
           return
-        } catch (localError) {
-          console.warn('[EdgeFirst] Failed to load from local edge:', (localError as Error).message)
-          fallbackReason.value = `Local load failed: ${(localError as Error).message}`
-          // Fall through to cloud
+        } catch (err) {
+          console.warn('[EdgeFirst] Direct edge manifest failed:', (err as Error).message)
+          fallbackReason.value = `Direct edge failed: ${(err as Error).message}`
         }
-      } else {
-        fallbackReason.value = 'Edge agent not available'
       }
 
-      // Step 2b: Fall back to cloud preview
-      console.log('[EdgeFirst] Falling back to cloud preview...')
+      // Step 2: Try tunnel via cloud
+      const agentId = getEdgeAgentId()
+      const tunnelOk = await checkTunnelHealth(agentId)
+      edgeAvailable.value = tunnelOk
 
+      if (tunnelOk) {
+        try {
+          const tunnelBaseUrl = `${CLOUD_BASE_URL}/edge/${agentId}`
+          const edgeManifest = await fetchManifest(tunnelBaseUrl, slideId)
+          manifest.value = edgeManifest
+          tileSource.value = createEdgeTileSource(tunnelBaseUrl, slideId, edgeManifest)
+          thumbnailUrl.value = `${tunnelBaseUrl}/v1/slides/${slideId}/thumb`
+          origin.value = 'tunnel'
+          console.log('[EdgeFirst] Loaded from TUNNEL edge (via cloud)')
+          return
+        } catch (err) {
+          console.warn('[EdgeFirst] Tunnel manifest failed:', (err as Error).message)
+          fallbackReason.value = `Tunnel failed: ${(err as Error).message}`
+        }
+      } else if (!directUrl) {
+        fallbackReason.value = 'Edge not available (direct or tunnel)'
+      }
+
+      // Step 3: Fall back to cloud preview
+      console.log('[EdgeFirst] Falling back to cloud preview...')
       const cloudManifest = await fetchCloudManifest(slideId)
       manifest.value = cloudManifest
-
       tileSource.value = createCloudTileSource(slideId, cloudManifest)
       thumbnailUrl.value = `${CLOUD_BASE_URL}/preview/${slideId}/thumb.jpg`
       origin.value = 'cloud'
 
-      // Warn if cloud has limited resolution
       const maxPreviewLevel = cloudManifest.maxPreviewLevel ?? cloudManifest.levelMax ?? 0
       const originalMaxLevel = cloudManifest.originalLevelMax ?? maxPreviewLevel
       if (originalMaxLevel > maxPreviewLevel) {
-        console.warn(`[EdgeFirst] Cloud preview limited to level ${maxPreviewLevel}, original has ${originalMaxLevel}. Connect Edge for full resolution.`)
+        console.warn(`[EdgeFirst] Cloud limited to level ${maxPreviewLevel}, original has ${originalMaxLevel}. Connect Edge for full resolution.`)
       }
 
       console.log('[EdgeFirst] Loaded from CLOUD preview')
@@ -308,9 +296,18 @@ export function useEdgeFirstTileSource () {
   }
 
   /**
+   * Called on repeated tile errors — invalidates sticky cache
+   */
+  function onTileError (): void {
+    if (origin.value === 'direct') {
+      invalidateDirectEdgeCache()
+    }
+  }
+
+  /**
    * Force reload from a specific source
    */
-  async function reloadFromSource (slideId: string, source: 'local' | 'cloud'): Promise<void> {
+  async function reloadFromSource (slideId: string, source: 'direct' | 'tunnel' | 'cloud'): Promise<void> {
     if (!slideId) {
       error.value = new Error('slideId is required')
       return
@@ -321,23 +318,28 @@ export function useEdgeFirstTileSource () {
     currentSlideId.value = slideId
 
     try {
-      if (source === 'local') {
+      if (source === 'direct') {
+        const directUrl = await discoverDirectEdge()
+        if (!directUrl) throw new Error('Direct edge not available')
+        const edgeManifest = await fetchManifest(directUrl, slideId)
+        manifest.value = edgeManifest
+        tileSource.value = createEdgeTileSource(directUrl, slideId, edgeManifest)
+        thumbnailUrl.value = `${directUrl}/v1/slides/${slideId}/thumb`
+        origin.value = 'direct'
+        fallbackReason.value = null
+      } else if (source === 'tunnel') {
         const agentId = getEdgeAgentId()
-        if (!agentId) {
-          throw new Error('No edge agent configured')
-        }
-
-        const localManifest = await fetchLocalManifest(agentId, slideId)
-        manifest.value = localManifest
-
-        tileSource.value = createLocalTileSource(agentId, slideId, localManifest)
-        thumbnailUrl.value = `${CLOUD_BASE_URL}/edge/${agentId}/v1/slides/${slideId}/thumb`
-        origin.value = 'local'
+        if (!agentId) throw new Error('No edge agent configured')
+        const tunnelBaseUrl = `${CLOUD_BASE_URL}/edge/${agentId}`
+        const edgeManifest = await fetchManifest(tunnelBaseUrl, slideId)
+        manifest.value = edgeManifest
+        tileSource.value = createEdgeTileSource(tunnelBaseUrl, slideId, edgeManifest)
+        thumbnailUrl.value = `${tunnelBaseUrl}/v1/slides/${slideId}/thumb`
+        origin.value = 'tunnel'
         fallbackReason.value = null
       } else {
         const cloudManifest = await fetchCloudManifest(slideId)
         manifest.value = cloudManifest
-
         tileSource.value = createCloudTileSource(slideId, cloudManifest)
         thumbnailUrl.value = `${CLOUD_BASE_URL}/preview/${slideId}/thumb.jpg`
         origin.value = 'cloud'
@@ -351,9 +353,6 @@ export function useEdgeFirstTileSource () {
     }
   }
 
-  /**
-   * Clear current state
-   */
   function clear (): void {
     isLoading.value = false
     error.value = null
@@ -365,56 +364,22 @@ export function useEdgeFirstTileSource () {
     currentSlideId.value = null
   }
 
-  /**
-   * Get the configured edge agent ID
-   */
   const edgeAgentId = computed(() => getEdgeAgentId())
-
-  /**
-   * Check if edge is configured
-   */
   const isEdgeConfigured = computed(() => !!getEdgeAgentId())
-
-  /**
-   * Get a human-readable status
-   */
   const status = computed(() => {
-    if (isLoading.value) {
-      return 'Carregando...'
-    }
-    if (error.value) {
-      return `Erro: ${error.value.message}`
-    }
-    if (origin.value === 'local') {
-      return 'Local (Edge)'
-    }
-    if (origin.value === 'cloud') {
-      return 'Cloud (Preview)'
-    }
+    if (isLoading.value) return 'Carregando...'
+    if (error.value) return `Erro: ${error.value.message}`
+    if (origin.value === 'direct') return 'Local (Direto)'
+    if (origin.value === 'tunnel') return 'Local (Tunnel)'
+    if (origin.value === 'cloud') return 'Cloud (Preview)'
     return 'Não carregado'
   })
 
   return {
-    // State
-    isLoading,
-    error,
-    origin,
-    fallbackReason,
-    manifest,
-    tileSource,
-    thumbnailUrl,
-    edgeAvailable,
-    currentSlideId,
-
-    // Computed
-    edgeAgentId,
-    isEdgeConfigured,
-    status,
-
-    // Methods
-    load,
-    reloadFromSource,
-    clear,
+    isLoading, error, origin, fallbackReason, manifest, tileSource,
+    thumbnailUrl, edgeAvailable, currentSlideId,
+    edgeAgentId, isEdgeConfigured, status,
+    load, reloadFromSource, onTileError, clear,
   }
 }
 
