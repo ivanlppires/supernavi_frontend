@@ -20,6 +20,8 @@ export interface TileManifest {
   height: number
   levelMax?: number
   maxLevel?: number
+  appMag?: number | null
+  mpp?: number | null
 }
 
 // --- Singleton state ---
