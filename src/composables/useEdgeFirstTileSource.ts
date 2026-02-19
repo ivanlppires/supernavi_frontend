@@ -123,7 +123,7 @@ export function useEdgeFirstTileSource () {
 
   const edgeAvailable = computed(() => false)
   const edgeAgentId = computed(() => '')
-  const isEdgeConfigured = computed(() => false)
+  const isEdgeConfigured = computed(() => true)
   const status = computed(() => {
     if (isLoading.value) return 'Carregando...'
     if (error.value) return `Erro: ${error.value.message}`
